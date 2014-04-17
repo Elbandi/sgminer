@@ -1,5 +1,8 @@
 # sgminer
 
+# Please check NEWS.md and /doc/configuration.md for updates
+
+CPU coin algo's no longer use kernel option to set. Use algorithm instead. i.e. --algorithm darkcoin
 
 ## Introduction
 
