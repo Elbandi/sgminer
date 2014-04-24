@@ -28,6 +28,7 @@
 #include "compat.h"
 #include "miner.h"
 #include "util.h"
+#include "pool.h"
 
 #if defined(USE_GRIDSEED)
 #define HAVE_AN_ASIC 1
