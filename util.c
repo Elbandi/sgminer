@@ -1644,7 +1644,7 @@ static bool parse_diff(struct pool *pool, json_t *val)
 	double old_diff, diff;
 
 	if (opt_diff_mult == 0)
-		diff = json_number_value(json_array_get(val, 0)) * algorithm->diff_multiplier1;
+		diff = json_number_value(json_array_get(val, 0)) * pool->algorithm.diff_multiplier1;
 	else
 		diff = json_number_value(json_array_get(val, 0)) * opt_diff_mult;
 		
@@ -1660,9 +1660,9 @@ static bool parse_diff(struct pool *pool, json_t *val)
 		int idiff = diff;
 
 		if ((double)idiff == diff)
-			applog(LOG_NOTICE, "%s difficulty changed to %d", get_pool_name(pool), idiff);
+			applog(pool == current_pool() ? LOG_NOTICE : LOG_DEBUG, "%s difficulty changed to %d", get_pool_name(pool), idiff);
 		else
-			applog(LOG_NOTICE, "%s difficulty changed to %.3f", get_pool_name(pool), diff);
+			applog(pool == current_pool() ? LOG_NOTICE : LOG_DEBUG, "%s difficulty changed to %.3f", get_pool_name(pool), diff);
 	} else
 		applog(LOG_DEBUG, "%s difficulty set to %f", pool->name, diff);
 
@@ -2164,7 +2164,7 @@ static bool setup_stratum_socket(struct pool *pool)
 
 	ret = getaddrinfo(sockaddr_url, sockaddr_port, hints, &servinfo);
 	if (ret) {
-		applog(LOG_ERR, "getaddrinfo() in setup_stratum_socket() returned %i: %s", ret, gai_strerror(ret));
+		applog(LOG_INFO, "getaddrinfo() in setup_stratum_socket() returned %i: %s", ret, gai_strerror(ret));
 		if (!pool->probed) {
 			applog(LOG_WARNING, "Failed to resolve (wrong URL?) %s:%s",
 			       sockaddr_url, sockaddr_port);

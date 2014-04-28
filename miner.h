@@ -1,5 +1,5 @@
-#ifndef __MINER_H__
-#define __MINER_H__
+#ifndef MINER_H
+#define MINER_H
 
 #include "config.h"
 
@@ -257,7 +257,7 @@ enum drv_driver {
 /* Use DRIVER_PARSE_COMMANDS to generate extern device_drv prototypes */
 #ifndef _MSC_VER
 DRIVER_PARSE_COMMANDS(DRIVER_PROTOTYPE)
-#endif 
+#endif
 
 enum alive {
 	LIFE_WELL,
@@ -497,6 +497,7 @@ struct cgpu_info {
 	cl_uint vwidth;
 	size_t work_size;
 	cl_ulong max_alloc;
+	algorithm_t algorithm;
 
 	int opt_lg, lookup_gap;
 	size_t opt_tc, thread_concurrency;
@@ -570,7 +571,6 @@ struct thread_q {
 struct thr_info {
 	int		id;
 	int		device_thread;
-	bool		primary_thread;
 
 	pthread_t	pth;
 	cgsem_t		sem;
@@ -581,6 +581,7 @@ struct thr_info {
 	struct timeval sick;
 
 	bool	pause;
+	bool	paused;
 	bool	getwork;
 	double	rolling;
 
@@ -1054,8 +1055,7 @@ extern pthread_mutex_t cgusbres_lock;
 extern cglock_t cgusb_fd_lock;
 #endif
 
-extern char *opt_algorithm;
-extern algorithm_t *algorithm;
+extern algorithm_t default_algorithm;
 
 /* scrypt-jane */
 extern unsigned int sj_minNf;
@@ -1074,7 +1074,7 @@ extern pthread_cond_t restart_cond;
 
 extern void clear_stratum_shares(struct pool *pool);
 extern void clear_pool_work(struct pool *pool);
-extern void set_target(unsigned char *dest_target, double diff);
+extern void set_target(algorithm_t algorithm, unsigned char *dest_target, double diff);
 extern int restart_wait(struct thr_info *thr, unsigned int mstime);
 
 extern void kill_work(void);
@@ -1098,7 +1098,7 @@ extern bool detect_stratum(struct pool *pool, char *url);
 extern void print_summary(void);
 extern void adjust_quota_gcd(void);
 extern struct pool *add_pool(void);
-extern bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char *pass);
+extern bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char *pass, char *name, char *desc, char *algo);
 
 #define MAX_GPUDEVICES 16
 #define MAX_DEVICES 4096
@@ -1218,7 +1218,7 @@ struct stratum_work {
 struct pool {
 	int pool_no;
 	char *name;
-	char *coin;
+	char *description;
 	int prio;
 	int accepted, rejected;
 	int seq_rejects;
@@ -1264,6 +1264,8 @@ struct pool {
 	char *rpc_user, *rpc_pass;
 	proxytypes_t rpc_proxytype;
 	char *rpc_proxy;
+
+	algorithm_t algorithm;
 
 	pthread_mutex_t pool_lock;
 	cglock_t data_lock;
@@ -1330,12 +1332,12 @@ struct pool {
 	uint32_t curtime;
 	uint32_t gbt_bits;
 	unsigned char *txn_hashes;
-	int gbt_txns;
-	int coinbase_len;
+	size_t gbt_txns;
+	size_t coinbase_len;
 
 	/* Shared by both stratum & GBT */
 	unsigned char *coinbase;
-	int nonce2_offset;
+	size_t nonce2_offset;
 	unsigned char header_bin[128];
 	int merkle_offset;
 
@@ -1546,4 +1548,4 @@ extern struct api_data *api_add_avg(struct api_data *root, char *name, float *da
 
 extern unsigned char sj_GetNfactor(int nTimestamp);
 
-#endif /* __MINER_H__ */
+#endif /* MINER_H */

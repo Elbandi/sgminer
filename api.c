@@ -128,7 +128,7 @@ static const char GPUSEP = ',';
 #define JOIN_CMD "CMD="
 #define BETWEEN_JOIN SEPSTR
 
-static const char *APIVERSION = "3.1";
+static const char *APIVERSION = "3.2";
 static const char *DEAD = "Dead";
 static const char *SICK = "Sick";
 static const char *NOSTART = "NoStart";
@@ -2070,8 +2070,9 @@ static void poolstatus(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
 
 		root = api_add_int(root, "POOL", &i, false);
 		root = api_add_string(root, "Name", pool->name, false);
-		root = api_add_string(root, "Coin", pool->coin, false);
 		root = api_add_escape(root, "URL", pool->rpc_url, false);
+		root = api_add_string(root, "Algorithm", (char *)pool->algorithm.name, false);
+		root = api_add_string(root, "Description", pool->description, false);
 		root = api_add_string(root, "Status", status, false);
 		root = api_add_int(root, "Priority", &(pool->prio), false);
 		root = api_add_int(root, "Quota", &pool->quota, false);
@@ -2362,7 +2363,8 @@ static void copyadvanceafter(char ch, char **param, char **buf)
 	*(dst_b++) = '\0';
 }
 
-static bool pooldetails(char *param, char **url, char **user, char **pass)
+static bool pooldetails(char *param, char **url, char **user, char **pass,
+			char **name, char **desc, char **algo)
 {
 	char *ptr, *buf;
 
@@ -2371,24 +2373,31 @@ static bool pooldetails(char *param, char **url, char **user, char **pass)
 		quit(1, "Failed to malloc pooldetails buf");
 
 	*url = buf;
-
-	// copy url
 	copyadvanceafter(',', &param, &buf);
-
 	if (!(*param)) // missing user
 		goto exitsama;
 
 	*user = buf;
-
-	// copy user
 	copyadvanceafter(',', &param, &buf);
-
 	if (!*param) // missing pass
 		goto exitsama;
 
 	*pass = buf;
+	copyadvanceafter(',', &param, &buf);
+	if (!*param) // missing name (allowed)
+		return true;
 
-	// copy pass
+	*name = buf;
+	copyadvanceafter(',', &param, &buf);
+	if (!*param) // missing desc
+		goto exitsama;
+
+	*desc = buf;
+	copyadvanceafter(',', &param, &buf);
+	if (!*param) // missing algo
+		goto exitsama;
+
+	*algo = buf;
 	copyadvanceafter(',', &param, &buf);
 
 	return true;
@@ -2401,6 +2410,7 @@ exitsama:
 static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, bool isjson, __maybe_unused char group)
 {
 	char *url, *user, *pass;
+	char *name = NULL, *desc = NULL, *algo = NULL;
 	struct pool *pool;
 	char *ptr;
 
@@ -2409,7 +2419,8 @@ static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *
 		return;
 	}
 
-	if (!pooldetails(param, &url, &user, &pass)) {
+	if (!pooldetails(param, &url, &user, &pass,
+			 &name, &desc, &algo)) {
 		ptr = escape_string(param, isjson);
 		message(io_data, MSG_INVPDP, 0, ptr, isjson);
 		if (ptr != param)
@@ -2418,9 +2429,14 @@ static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *
 		return;
 	}
 
+	/* If API client is old, it might not have provided all fields. */
+	if (name == NULL) name = strdup("");
+	if (desc == NULL) desc = strdup("");
+	if (algo == NULL) algo = strdup("scrypt");  // FIXME?
+
 	pool = add_pool();
 	detect_stratum(pool, url);
-	add_pool_details(pool, true, url, user, pass);
+	add_pool_details(pool, true, url, user, pass, name, desc, algo);
 
 	ptr = escape_string(url, isjson);
 	message(io_data, MSG_ADDPOOL, 0, ptr, isjson);
@@ -3165,7 +3181,7 @@ static void minecoin(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __may
 	message(io_data, MSG_MINECOIN, 0, NULL, isjson);
 	io_open = io_add(io_data, isjson ? COMSTR JSON_MINECOIN : _MINECOIN COMSTR);
 
-	root = api_add_const(root, "Hash Method", algorithm->name, false);
+	root = api_add_string(root, "Hash Method", (char *)get_devices(0)->algorithm.name, false);
 
 	cg_rlock(&ch_lock);
 	root = api_add_timeval(root, "Current Block Time", &block_timeval, true);
@@ -4682,7 +4698,7 @@ die:
 	pthread_cleanup_pop(true);
 
 	free(apisock);
-	
+
 	if (opt_debug)
 		applog(LOG_DEBUG, "API: terminating due to: %s",
 				do_a_quit ? "QUIT" : (do_a_restart ? "RESTART" : (bye ? "BYE" : "UNKNOWN!")));

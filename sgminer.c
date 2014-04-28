@@ -108,8 +108,7 @@ int opt_queue = 1;
 int opt_scantime = 7;
 int opt_expiry = 28;
 
-char *opt_algorithm;
-algorithm_t *algorithm;
+algorithm_t default_algorithm;
 
 static const bool opt_time = true;
 unsigned long long global_hashrate;
@@ -241,6 +240,11 @@ pthread_rwlock_t devices_lock;
 static pthread_mutex_t lp_lock;
 static pthread_cond_t lp_cond;
 
+static pthread_mutex_t algo_switch_lock;
+static int algo_switch_n = 0;
+static pthread_mutex_t algo_switch_wait_lock;
+static pthread_cond_t algo_switch_wait_cond;
+
 pthread_mutex_t restart_lock;
 pthread_cond_t restart_cond;
 
@@ -272,7 +276,9 @@ static struct pool *currentpool = NULL;
 int total_pools, enabled_pools;
 enum pool_strategy pool_strategy = POOL_FAILOVER;
 int opt_rotate_period;
-static int total_urls, total_users, total_passes, total_userpasses;
+static int total_urls;
+
+/* Used in config parsing, e.g. pool array. */
 static int json_array_index = -1;
 
 static
@@ -581,10 +587,13 @@ struct pool *add_pool(void)
 		quit(1, "Failed to calloc pool in add_pool");
 	pool->pool_no = pool->prio = total_pools;
 
-	/* Default pool name */
+	/* Default pool name is "" (empty string) */
 	char buf[32];
-	sprintf(buf, "");
+	buf[0] = '\0';
 	pool->name = strdup(buf);
+
+	/* Algorithm */
+	pool->algorithm = default_algorithm;
 
 	pools = (struct pool **)realloc(pools, sizeof(struct pool *) * (total_pools + 2));
 	pools[total_pools++] = pool;
@@ -604,12 +613,13 @@ struct pool *add_pool(void)
 	pool->quota = 1;
 	adjust_quota_gcd();
 
-	pool->coin = "";
+	pool->description = "";
 
 	return pool;
 }
 
-static struct pool* get_current_pool() 
+/* Used in configuration parsing. */
+static struct pool* get_current_pool()
 {
 	while ((json_array_index + 1) > total_pools)
 		add_pool();
@@ -619,8 +629,20 @@ static struct pool* get_current_pool()
 			add_pool();
 		return pools[total_pools - 1];
 	}
-	
-	return pools[json_array_index];	
+
+	return pools[json_array_index];
+}
+
+/* Used everywhere else (to get pool currently mined on). */
+struct pool *current_pool(void)
+{
+	struct pool *pool;
+
+	cg_rlock(&control_lock);
+	pool = currentpool;
+	cg_runlock(&control_lock);
+
+	return pool;
 }
 
 /* Pool variant of test and set */
@@ -646,17 +668,6 @@ bool pool_tclear(struct pool *pool, bool *var)
 	mutex_unlock(&pool->pool_lock);
 
 	return ret;
-}
-
-struct pool *current_pool(void)
-{
-	struct pool *pool;
-
-	cg_rlock(&control_lock);
-	pool = currentpool;
-	cg_runlock(&control_lock);
-
-	return pool;
 }
 
 char *set_int_range(const char *arg, int *i, int min, int max)
@@ -824,10 +835,31 @@ static char *set_url(char *arg)
 	return NULL;
 }
 
-static char *set_poolname(char *arg)
+
+static char *set_pool_algorithm(const char *arg)
 {
 	struct pool *pool = get_current_pool();
-	
+
+	applog(LOG_DEBUG, "Setting pool %i algorithm to %s", pool->pool_no, arg);
+	set_algorithm(&pool->algorithm, arg);
+
+	return NULL;
+}
+
+static char *set_pool_nfactor(const char *arg)
+{
+	struct pool *pool = get_current_pool();
+
+	applog(LOG_DEBUG, "Setting pool %i N-factor to %s", pool->pool_no, arg);
+	set_algorithm_nfactor(&pool->algorithm, (const uint8_t) atoi(arg));
+
+	return NULL;
+}
+
+static char *set_pool_name(char *arg)
+{
+	struct pool *pool = get_current_pool();
+
 	applog(LOG_DEBUG, "Setting pool %i name to %s", pool->pool_no, arg);
 	opt_set_charp(arg, &pool->name);
 
@@ -837,7 +869,7 @@ static char *set_poolname(char *arg)
 static char *set_poolname_deprecated(char *arg)
 {
 	applog(LOG_ERR, "Specifying pool name by --poolname is deprecated. Use --name instead.");
-	set_poolname(arg);
+	set_pool_name(arg);
 
 	return NULL;
 }
@@ -911,7 +943,8 @@ static char *set_pool_state(char *arg)
 static char *set_quota(char *arg)
 {
 	char *semicolon = strchr(arg, ';'), *url;
-	int len, qlen, quota;
+	size_t len, qlen;
+	int quota;
 	struct pool *pool;
 
 	if (!semicolon)
@@ -982,12 +1015,12 @@ static char *set_pool_priority(char *arg)
 	return NULL;
 }
 
-static char *set_pool_coin(char *arg)
+static char *set_pool_description(char *arg)
 {
 	struct pool *pool = get_current_pool();
 
-	applog(LOG_DEBUG, "Setting pool %i coin to %s", pool->pool_no, arg);
-	opt_set_charp(arg, &pool->coin);
+	applog(LOG_DEBUG, "Setting pool %i description to %s", pool->pool_no, arg);
+	opt_set_charp(arg, &pool->description);
 
 	return NULL;
 }
@@ -1085,17 +1118,17 @@ static void load_temp_cutoffs()
 
 static char *set_algo(const char *arg)
 {
-	set_algorithm(&algorithm, arg);
-	applog(LOG_INFO, "Set algorithm to %s", algorithm->name);
+	set_algorithm(&default_algorithm, arg);
+	applog(LOG_INFO, "Set default algorithm to %s", default_algorithm.name);
 
 	return NULL;
 }
 
 static char *set_nfactor(const char *arg)
 {
-	set_algorithm_nfactor(algorithm, (uint8_t)atoi(arg));
+	set_algorithm_nfactor(&default_algorithm, (const uint8_t) atoi(arg));
 	applog(LOG_INFO, "Set algorithm N-factor to %d (N to %d)",
-	       algorithm->nfactor, algorithm->n);
+	       default_algorithm.nfactor, default_algorithm.n);
 
 	return NULL;
 }
@@ -1187,7 +1220,7 @@ char *set_difficulty_multiplier(char *arg)
 static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--algorithm",
 		     set_algo, NULL, NULL,
-		     "Set mining algorithm and most common defaults, default: static"),
+		     "Set mining algorithm and most common defaults, default: scrypt"),
 	OPT_WITH_ARG("--api-allow",
 		     set_api_allow, NULL, NULL,
 		     "Allow API access only to the given list of [G:]IP[/Prefix] addresses[/subnets]"),
@@ -1235,9 +1268,6 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--benchmark",
 			opt_set_bool, &opt_benchmark,
 			"Run sgminer in benchmark mode - produces no shares"),
-	OPT_WITH_ARG("--coin",
-		     set_pool_coin, NULL, NULL,
-		     "Pool coin"),
 #ifdef HAVE_CURSES
 	OPT_WITHOUT_ARG("--compact",
 			opt_set_bool, &opt_compact,
@@ -1246,6 +1276,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--debug|-D",
 		     enable_debug, &opt_debug,
 		     "Enable debug output"),
+	OPT_WITH_ARG("--description",
+		     set_pool_description, NULL, NULL,
+		     "Pool description"),
 	OPT_WITH_ARG("--device|-d",
 		     set_devices, NULL, NULL,
 	             "Select device to use, one value, range and/or comma separated (e.g. 0-2,4) default: all"),
@@ -1376,7 +1409,7 @@ static struct opt_table opt_config_table[] = {
 		     "Use custom pipe cmd for output messages"),
 #endif // defined(unix)
 	OPT_WITH_ARG("--name",
-		     set_poolname, NULL, NULL,
+		     set_pool_name, NULL, NULL,
 		     "Name of pool"),
 	OPT_WITHOUT_ARG("--net-delay",
 			opt_set_bool, &opt_delaynet,
@@ -1410,9 +1443,12 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--per-device-stats",
 			opt_set_bool, &want_per_device_stats,
 			"Force verbose mode and output per-device statistics"),
-	OPT_WITH_ARG("--poolname", /* Backward compatibility, to be removed. */
+	OPT_WITH_ARG("--poolname", /* TODO: Backward compatibility, to be removed. */
 		     set_poolname_deprecated, NULL, NULL,
 		     opt_hidden),
+	OPT_WITH_ARG("--priority",
+			 set_pool_priority, NULL, NULL,
+			 "Pool priority"),
 	OPT_WITHOUT_ARG("--protocol-dump|-P",
 			opt_set_bool, &opt_protocol,
 			"Verbose dump of protocol-level activities"),
@@ -1519,6 +1555,12 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--url|-o",
 		     set_url, NULL, NULL,
 		     "URL for bitcoin JSON-RPC server"),
+	OPT_WITH_ARG("--pool-algorithm",
+		     set_pool_algorithm, NULL, NULL,
+		     "Set algorithm for pool"),
+	OPT_WITH_ARG("--pool-nfactor",
+		     set_pool_nfactor, NULL, NULL,
+		     "Set N-factor for pool"),
 	OPT_WITH_ARG("--user|-u",
 		     set_user, NULL, NULL,
 		     "Username for bitcoin JSON-RPC server"),
@@ -1547,9 +1589,6 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--userpass|-O",
 		     set_userpass, NULL, NULL,
 		     "Username:Password pair for bitcoin JSON-RPC server"),
-	OPT_WITH_ARG("--pool-priority",
-			 set_pool_priority, NULL, NULL,
-			 "Pool priority"),
 	OPT_WITHOUT_ARG("--worktime",
 			opt_set_bool, &opt_worktime,
 			"Display extra work time debug information"),
@@ -1602,7 +1641,7 @@ static char *parse_config(json_t *config, bool fileconf, int parent_iteration)
 				err = opt->cb_arg(json_string_value(val),
 						  opt->u.arg);
 			} else if ((opt->type & OPT_HASARG) && json_is_array(val)) {
-				int n, size = json_array_size(val);
+				size_t n, size = json_array_size(val);
 
 				for (n = 0; n < size && !err; n++) {
 					if (json_is_string(json_array_get(val, n)))
@@ -1825,7 +1864,7 @@ void free_work(struct work *w)
 	free(w);
 }
 
-static void gen_hash(unsigned char *data, unsigned char *hash, int len);
+static void gen_hash(unsigned char *data, unsigned char *hash, size_t len);
 static void calc_diff(struct work *work, double known);
 char *workpadding = "000000800000000000000000000000000000000000000000000000000000000000000000000000000000000080020000";
 
@@ -1861,7 +1900,7 @@ static bool __build_gbt_txns(struct pool *pool, json_t *res_val)
 	for (i = 0; i < pool->gbt_txns; i++) {
 		json_t *txn_val = json_object_get(json_array_get(txn_array, i), "data");
 		const char *txn = json_string_value(txn_val);
-		int txn_len = strlen(txn);
+		size_t txn_len = strlen(txn);
 		unsigned char *txn_bin;
 
 		cal_len = txn_len;
@@ -2021,7 +2060,7 @@ static bool gbt_decode(struct pool *pool, json_t *res_val)
 	bool submitold;
 	const char *bits;
 	const char *workid;
-	int cbt_len, orig_len;
+	size_t cbt_len, orig_len;
 	uint8_t *extra_len;
 	size_t cal_len;
 
@@ -2288,7 +2327,7 @@ static void suffix_string(uint64_t val, char *buf, size_t bufsiz, int sigdigits)
 	} else {
 		/* Always show sigdigits + 1, padded on right with zeroes
 		 * followed by suffix */
-		int ndigits = sigdigits - 1 - (dval > 0.0 ? floor(log10(dval)) : 0);
+		int ndigits = sigdigits - 1 - (dval > 0.0 ? (int)floor(log10(dval)) : 0);
 
 		snprintf(buf, bufsiz, "%*.*f%s", sigdigits + 1, ndigits, dval, suffix);
 	}
@@ -3209,7 +3248,7 @@ static void calc_diff(struct work *work, double known)
 	else {
 		double d64, dcut64;
 
-		d64 = algorithm->diff_multiplier2 * truediffone;
+		d64 = work->pool->algorithm.diff_multiplier2 * truediffone;
 
 		dcut64 = le256todouble(work->target);
 		if (unlikely(!dcut64))
@@ -3323,7 +3362,7 @@ static void kill_mining(void)
 		if (thr && PTH(thr) != 0L)
 			pth = &thr->pth;
 		thr_info_cancel(thr);
-#if !defined(WIN32) || defined(__MINGW64_VERSION_MAJOR)
+#ifndef WIN32
 		if (pth && *pth)
 			pthread_join(*pth, NULL);
 #else
@@ -3849,7 +3888,7 @@ static double share_diff(const struct work *work)
 	double d64, s64;
 	double ret;
 
-	d64 = algorithm->diff_multiplier2 * truediffone;
+	d64 = work->pool->algorithm.diff_multiplier2 * truediffone;
 	s64 = le256todouble(work->hash);
 	if (unlikely(!s64))
 		s64 = 0;
@@ -3984,7 +4023,6 @@ void switch_pools(struct pool *selected)
 	mutex_lock(&lp_lock);
 	pthread_cond_broadcast(&lp_cond);
 	mutex_unlock(&lp_lock);
-
 }
 
 void discard_work(struct work *work)
@@ -4180,7 +4218,7 @@ static void set_blockdiff(const struct work *work)
 	uint8_t pow = work->data[72];
 	int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
 	uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
-	double numerator = algorithm->diff_numerator << powdiff;
+	double numerator = work->pool->algorithm.diff_numerator << powdiff;
 	double ddiff = numerator / (double)diff32;
 
 	if (unlikely(current_diff != ddiff)) {
@@ -4440,6 +4478,13 @@ void write_config(FILE *fcfg)
 	for(i = 0; i < total_pools; i++) {
 		struct pool *pool = pools[i];
 
+		/* Using get_pool_name() here is unsafe if opt_incognito is true. */
+		if (strcmp(pool->name, "") != 0) {
+			fprintf(fcfg, "\n\t\t\"name\" : \"%s\",", json_escape(pool->name));
+		}
+		if (strcmp(pool->description, "") != 0) {
+			fprintf(fcfg, "\n\t\t\"description\" : \"%s\",", json_escape(pool->description));
+		}
 		if (pool->quota != 1) {
 			fprintf(fcfg, "%s\n\t{\n\t\t\"quota\" : \"%s%s%s%d;%s\",", i > 0 ? "," : "",
 				pool->rpc_proxy ? json_escape((char *)proxytype(pool->rpc_proxytype)) : "",
@@ -4623,6 +4668,8 @@ void write_config(FILE *fcfg)
 	}
 	if (opt_removedisabled)
 		fprintf(fcfg, ",\n\"remove-disabled\" : true");
+	if (strcmp(default_algorithm.name, "scrypt") != 0)
+		fprintf(fcfg, ",\n\"algorithm\" : \"%s\"", json_escape((char *)default_algorithm.name));
 	if (opt_api_allow)
 		fprintf(fcfg, ",\n\"api-allow\" : \"%s\"", json_escape(opt_api_allow));
 	if (strcmp(opt_api_mcast_addr, API_MCAST_ADDR) != 0)
@@ -6078,7 +6125,7 @@ out_unlock:
 	return work;
 }
 
-static void gen_hash(unsigned char *data, unsigned char *hash, int len)
+static void gen_hash(unsigned char *data, unsigned char *hash, size_t len)
 {
 	unsigned char hash1[32];
 
@@ -6086,7 +6133,7 @@ static void gen_hash(unsigned char *data, unsigned char *hash, int len)
 	sha256(hash1, 32, hash);
 }
 
-void set_target(unsigned char *dest_target, double diff)
+void set_target(algorithm_t algorithm, unsigned char *dest_target, double diff)
 {
 	unsigned char target[32];
 	uint64_t *data64, h64;
@@ -6099,7 +6146,7 @@ void set_target(unsigned char *dest_target, double diff)
 	}
 
 	// FIXME: is target set right?
-	d64 = algorithm->diff_multiplier2 * truediffone;
+	d64 = algorithm.diff_multiplier2 * truediffone;
 	d64 /= diff;
 
 	dcut64 = d64 / bits192;
@@ -6162,7 +6209,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 	cg_dwlock(&pool->data_lock);
 
 	/* Generate merkle root */
-	if ((algorithm->algo == ALGO_FUGUECOIN) || (algorithm->algo == ALGO_GROESTLCOIN) || (algorithm->algo == ALGO_TWECOIN))
+	if ((pool->algorithm.algo == ALGO_FUGUECOIN) || (pool->algorithm.algo == ALGO_GROESTLCOIN) || (pool->algorithm.algo == ALGO_TWECOIN))
 		sha256(pool->coinbase, pool->swork.cb_len, merkle_root);
 	else
 		gen_hash(pool->coinbase, merkle_root, pool->swork.cb_len);
@@ -6204,7 +6251,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 	}
 
 	calc_midstate(work);
-	set_target(work->target, work->sdiff);
+	set_target(pool->algorithm, work->target, work->sdiff);
 
 	local_work++;
 	work->pool = pool;
@@ -6219,6 +6266,53 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 	calc_diff(work, work->sdiff);
 
 	cgtime(&work->tv_staged);
+}
+
+static void get_work_prepare_thread(struct thr_info *mythr, struct work *work)
+{
+	int i;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	mutex_lock(&algo_switch_lock);
+
+	if (cmp_algorithm(&work->pool->algorithm, &mythr->cgpu->algorithm) && (algo_switch_n == 0)) {
+		mutex_unlock(&algo_switch_lock);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+		return;
+	}
+
+	algo_switch_n++;
+
+	// If all threads are waiting now
+	if (algo_switch_n >= mining_threads) {
+		rd_lock(&mining_thr_lock);
+		// Shutdown all threads first (necessary)
+		for (i = 0; i < mining_threads; i++) {
+			struct thr_info *thr = mining_thr[i];
+		  thr->cgpu->drv->thread_shutdown(thr);
+		}
+		// Change algorithm for each thread (thread_prepare calls initCl)
+		for (i = 0; i < mining_threads; i++) {
+			struct thr_info *thr = mining_thr[i];
+			thr->cgpu->algorithm = work->pool->algorithm;
+		  thr->cgpu->drv->thread_prepare(thr);
+		}
+		rd_unlock(&mining_thr_lock);
+	  algo_switch_n = 0;
+		mutex_unlock(&algo_switch_lock);
+		// Signal other threads to start working now
+		mutex_lock(&algo_switch_wait_lock);
+		pthread_cond_broadcast(&algo_switch_wait_cond);
+		mutex_unlock(&algo_switch_wait_lock);
+	// Not all threads are waiting, join the waiting list
+	} else {
+		mutex_unlock(&algo_switch_lock);
+		// Wait for signal to start working again
+		mutex_lock(&algo_switch_wait_lock);
+		pthread_cond_wait(&algo_switch_wait_cond, &algo_switch_wait_lock);
+		mutex_unlock(&algo_switch_wait_lock);
+	}
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 }
 
 struct work *get_work(struct thr_info *thr, const int thr_id)
@@ -6237,6 +6331,9 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 			wake_gws();
 		}
 	}
+
+	get_work_prepare_thread(thr, work);
+
 	diff_t = time(NULL) - diff_t;
 	/* Since this is a blocking function, we need to add grace time to
 	 * the device's last valid work to not make outages appear to be
@@ -6315,13 +6412,12 @@ static void rebuild_nonce(struct work *work, uint32_t nonce)
 {
 	uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
 
-	if (algorithm->algo == ALGO_SCRYPT_JANE) {
+	if (work->pool->algorithm.algo == ALGO_SCRYPT_JANE) {
 		*work_nonce = htobe32(nonce);
-		algorithm->regenhash(work);
 	} else {
 		*work_nonce = htole32(nonce);
-		algorithm->regenhash(work);
 	}
+	work->pool->algorithm.regenhash(work);
 }
 
 /* For testing a nonce against diff 1 */
@@ -6342,7 +6438,7 @@ bool test_nonce_diff(struct work *work, uint32_t nonce, double diff)
 	uint64_t *hash64 = (uint64_t *)(work->hash + 24), diff64;
 
 	rebuild_nonce(work, nonce);
-	diff64 = algorithm->diff_nonce;
+	diff64 = work->pool->algorithm.diff_nonce;
 	diff64 /= diff;
 
 	return (le64toh(*hash64) <= diff64);
@@ -6351,11 +6447,11 @@ bool test_nonce_diff(struct work *work, uint32_t nonce, double diff)
 static void update_work_stats(struct thr_info *thr, struct work *work)
 {
 	double test_diff = current_diff;
-	test_diff *= algorithm->diff_multiplier2;
+	test_diff *= work->pool->algorithm.diff_multiplier2;
 
 	work->share_diff = share_diff(work);
 
-	test_diff *= algorithm->diff_multiplier2;
+	test_diff *= work->pool->algorithm.diff_multiplier2;
 
 	if (unlikely(work->share_diff >= test_diff)) {
 		work->block = true;
@@ -6449,8 +6545,10 @@ static void mt_disable(struct thr_info *mythr, const int thr_id,
 	applog(LOG_WARNING, "Thread %d being disabled", thr_id);
 	mythr->rolling = mythr->cgpu->rolling = 0;
 	applog(LOG_DEBUG, "Waiting on sem in miner thread");
+	mythr->paused = true;
 	cgsem_wait(&mythr->sem);
 	applog(LOG_WARNING, "Thread %d being re-enabled", thr_id);
+	mythr->paused = false;
 	drv->thread_enable(mythr);
 }
 
@@ -6467,7 +6565,7 @@ static void hash_sole_work(struct thr_info *mythr)
 	struct sgminer_stats *pool_stats;
 	/* Try to cycle approximately 5 times before each log update */
 	const long cycle = opt_log_interval / 5 ? 5 : 1;
-	const bool primary = (!mythr->device_thread) || mythr->primary_thread;
+	const bool primary = mythr->device_thread == 0;
 	struct timeval diff, sdiff, wdiff = {0, 0};
 	uint32_t max_nonce = drv->can_limit_work(mythr);
 	int64_t hashes_done = 0;
@@ -6508,7 +6606,7 @@ static void hash_sole_work(struct thr_info *mythr)
 			work->device_diff = MIN(drv->working_diff, work->work_difficulty);
 		} else if (drv->working_diff > work->work_difficulty)
 			drv->working_diff = work->work_difficulty;
-		set_target(work->device_target, work->device_diff);
+		set_target(work->pool->algorithm, work->device_target, work->device_diff);
 
 		do {
 			cgtime(&tv_start);
@@ -7427,7 +7525,7 @@ static void *watchdog_thread(void __maybe_unused *userdata)
 					temp, fanpercent, fanspeed, engineclock, memclock, vddc, activity, powertune);
 			}
 #endif
-			
+
 			/* Thread is disabled or waiting on getwork */
 			if (*denable == DEV_DISABLED || thr->getwork)
 				continue;
@@ -7669,7 +7767,7 @@ static void *test_pool_thread(void *arg)
 /* Always returns true that the pool details were added unless we are not
  * live, implying this is the only pool being added, so if no pools are
  * active it returns false. */
-bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char *pass)
+bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char *pass, char *name, char *desc, char *algo)
 {
 	size_t siz;
 
@@ -7678,6 +7776,10 @@ bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char 
 	pool->rpc_url = url;
 	pool->rpc_user = user;
 	pool->rpc_pass = pass;
+	pool->name = name;
+	pool->description = desc;
+	set_algorithm(&pool->algorithm, algo);
+
 	siz = strlen(pool->rpc_user) + strlen(pool->rpc_pass) + 2;
 	pool->rpc_userpass = (char *)malloc(siz);
 	if (!pool->rpc_userpass)
@@ -7701,23 +7803,26 @@ bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char 
 static bool input_pool(bool live)
 {
 	char *url = NULL, *user = NULL, *pass = NULL;
+	char *name = NULL, *desc = NULL, *algo = NULL;
 	struct pool *pool;
 	bool ret = false;
 
 	immedok(logwin, true);
 	wlogprint("Input server details.\n");
 
+	/* Get user input */
 	url = curses_input("URL");
-	if (!url)
-		goto out;
-
-	user = curses_input("Username");
-	if (!user)
-		goto out;
-
+	if (!url) goto out;
+	user = curses_input("User name");
+	if (!user) goto out;
 	pass = curses_input("Password");
-	if (!pass)
-		goto out;
+	if (!pass) goto out;
+	name = curses_input("Pool name (optional)");
+	if (strcmp(name, "-1") == 0) strcpy(name, "");
+	desc = curses_input("Description (optional)");
+	if (strcmp(desc, "-1") == 0) strcpy(desc, "");
+	algo = curses_input("Algorithm (optional)");
+	if (strcmp(name, "-1") == 0) strcpy(algo, "");
 
 	pool = add_pool();
 
@@ -7734,7 +7839,8 @@ static bool input_pool(bool live)
 		url = httpinput;
 	}
 
-	ret = add_pool_details(pool, live, url, user, pass);
+	ret = add_pool_details(pool, live, url, user, pass,
+			       name, desc, algo);
 out:
 	immedok(logwin, false);
 
@@ -7745,6 +7851,12 @@ out:
 			free(user);
 		if (pass)
 			free(pass);
+		if (name)
+			free(name);
+		if (desc)
+			free(desc);
+		if (algo)
+			free(algo);
 	}
 	return ret;
 }
@@ -8007,7 +8119,7 @@ bool add_cgpu(struct cgpu_info *cgpu)
 {
 	static struct _cgpu_devid_counter *devids = NULL;
 	struct _cgpu_devid_counter *d;
-	
+
 	HASH_FIND_STR(devids, cgpu->drv->name, d);
 	if (d)
 		cgpu->device_id = ++d->lastid;
@@ -8245,6 +8357,7 @@ int main(int argc, char *argv[])
 	rwlock_init(&netacc_lock);
 	rwlock_init(&mining_thr_lock);
 	rwlock_init(&devices_lock);
+	mutex_init(&algo_switch_lock);
 
 	mutex_init(&lp_lock);
 	if (unlikely(pthread_cond_init(&lp_cond, NULL)))
@@ -8253,6 +8366,10 @@ int main(int argc, char *argv[])
 	mutex_init(&restart_lock);
 	if (unlikely(pthread_cond_init(&restart_cond, NULL)))
 		quit(1, "Failed to pthread_cond_init restart_cond");
+
+	mutex_init(&algo_switch_wait_lock);
+	if (unlikely(pthread_cond_init(&algo_switch_wait_cond, NULL)))
+		quit(1, "Failed to pthread_cond_init algo_switch_wait_cond");
 
 	if (unlikely(pthread_cond_init(&gws_cond, NULL)))
 		quit(1, "Failed to pthread_cond_init gws_cond");
@@ -8299,7 +8416,7 @@ int main(int argc, char *argv[])
 #endif
 
 	/* Default algorithm specified in algorithm.c ATM */
-	set_algorithm(&algorithm, "scrypt");
+	set_algorithm(&default_algorithm, "scrypt");
 
 	devcursor = 7;
 	logstart = devcursor + 1;
@@ -8617,7 +8734,7 @@ begin_bench:
 
 		cgpu->rolling = cgpu->total_mhashes = 0;
 	}
-	
+
 	cgtime(&total_tv_start);
 	cgtime(&total_tv_end);
 	get_datestamp(datestamp, sizeof(datestamp), &total_tv_start);

@@ -768,6 +768,8 @@ static bool gridseed_detect_one(libusb_device *dev, struct usb_find_devices *fou
 
 	gc3355_init(gridseed, info);
 
+	gridseed->algorithm = default_algorithm;
+
 	if (!add_cgpu(gridseed))
 		goto unshin;
 

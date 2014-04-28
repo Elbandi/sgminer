@@ -1,5 +1,5 @@
-#ifndef __OCL_H__
-#define __OCL_H__
+#ifndef OCL_H
+#define OCL_H
 
 #include "config.h"
 
@@ -34,5 +34,6 @@ typedef struct {
 
 extern char *file_contents(const char *filename, int *length);
 extern int clDevicesNum(void);
-extern _clState *initCl(unsigned int gpu, char *name, size_t nameSize);
-#endif /* __OCL_H__ */
+extern _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *algorithm);
+
+#endif /* OCL_H */

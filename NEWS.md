@@ -2,16 +2,36 @@
 
 ## Version 4.2.0 - TBA
 
+* 
+
+
+## Version 4.1.271 - 12th April 2014
+
+* Allow setting algorithm per-pool and initial implementation of kernel
+  hot-swapping (by _mrbrdo_). Use options `pool-algorithm` (in config
+  file or in CLI) or `algorithm` (config-only).
+* NCurses UI [S][W] writes pool name and description to configuration.
+* Added algorithm name to `pools` API command (by _troky_).
+* NCurses UI asks for (optional) pool name, description and algorithm
+  when adding pool.
+* API command `addpool` allows both `url,user,pass` and
+  `url,user,pass,name,desc,algo`.
+
+
+## Version 4.1.242 - 7th April 2014
+
+* There are now two mailing lists (on SourceForge), see `README.md`.
 * Adaptive-N-factor algorithm support (by _Bufius_, _Zuikkis_ and
   _veox_). For details on choosing the algorithm, see
   `doc/configuration.md`.
-* Setting pool name with `poolname` is deprecated. Use `name` instead.
 * Allowed kernel names are no longer hard-coded. It is now possible to
   use any `.cl` file.
 * Configuration parameter `poolname` has been renamed to `name`.
+  `poolname` is deprecated and will be removed in a future version.
 * Multiple `--name` parsing should now work as expected (by _troky_).
-* `--coin` configuration parameter to specify a freeform pool
-  description (by _troky_).
+* `--description` configuration parameter to specify a freeform pool
+  description, and `--priority` to specify the pool's priority (by
+  _troky_).
 * Added new Algorithms for cpu coins
   nscrypt --algorithm nscrypt
   scrypt-jane --algorithm scrypt-jane

@@ -7,17 +7,19 @@ CPU coin algo's no longer use kernel option to set. Use algorithm instead. i.e. 
 ## Introduction
 
 This is a multi-threaded multi-pool GPU miner with ATI GPU monitoring,
-(over)clocking and fanspeed support for scrypt-based coins. It is based on
-cgminer by Con Kolivas (ckolivas), which is in turn based on cpuminer by
-Jeff Garzik (jgarzik).
+(over)clocking and fanspeed support for scrypt-based cryptocurrency. It is
+based on cgminer by Con Kolivas (ckolivas), which is in turn based on
+cpuminer by Jeff Garzik (jgarzik).
 
 **releases**: https://github.com/veox/sgminer/releases
 
 **git tree**: https://github.com/veox/sgminer
 
-**issues**: https://github.com/veox/sgminer/issues
+**bugtracker**: https://github.com/veox/sgminer/issues
 
-**irc**: `#sgminer` on freenode
+**irc**: `#sgminer` and `#sgminer-dev` on freenode
+
+**mailing lists**: https://sourceforge.net/p/sgminer/mailman/
 
 License: GPLv3.  See `COPYING` for details.
 
@@ -69,6 +71,11 @@ sgminer-specific configuration options:
     --disable-adl           Override detection and disable building with adl
 	--disable-adl-checks
     --without-curses        Do not compile support for curses TUI
+    
+#### Debian Example
+
+    apt-get install libcurl4-openssl-dev pkg-config libtool libncurses5-dev
+AMD APP SDK and AMD ADL SDK must be downloaded from the amd websites.
 
 ### *nix build instructions
 

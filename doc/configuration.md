@@ -10,6 +10,9 @@
 Allows choosing between the few mining algorithms for incompatible
 cryptocurrencies.
 
+If specified in a pool section in the configuration file, sets the
+option for that pool only. Otherwise sets the default.
+
 *Argument:* string
 
 *Default:* `scrypt`
@@ -36,14 +39,28 @@ cryptocurrencies.
   without warning.
 
 
+### pool-algorithm
+
+Allows choosing the algorithm for a specific pool. See `algorithm`.
+
+
 ### nfactor
 
 Overrides the default scrypt parameter N, specified as the factor of 2
 (`N = 2^nfactor`).
 
+If specified in a pool section in the configuration file, sets the
+option for that pool only. Otherwise sets the default.
+
 *Argument:* whole number (>1).
 
 *Default:* depends on `algorithm`; otherwise `10`.
+
+
+### pool-nfactor
+
+Overrides the default scrypt parameter N for a specific pool.
+See `nfactor`.
 
 
 ## CLI-only options

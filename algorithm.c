@@ -64,15 +64,15 @@ static algorithm_t algos[] = {
 	{ NULL, NULL, 0, 0, ALGO_SCRYPT, 0, 0, 0, 0, NULL}
 };
 
-void set_algorithm(algorithm_t** algo, const char* newname) {
+void set_algorithm(algorithm_t* algo, const char* newname) {
 	algorithm_t* a;
 	for (a = algos; a->name; a++) {
 		if (strcmp(a->name, newname) == 0) {
-			*algo = a;
+			*algo = *a;
 			break;
 		}
 	}
-	(*algo)->n = (1 << (*algo)->nfactor);
+	algo->n = (1 << algo->nfactor);
 }
 
 void set_algorithm_nfactor(algorithm_t* algo, const uint8_t nfactor) {
@@ -80,4 +80,9 @@ void set_algorithm_nfactor(algorithm_t* algo, const uint8_t nfactor) {
 	algo->n = (1 << nfactor);
 
 	return;
+}
+
+bool cmp_algorithm(algorithm_t* algo1, algorithm_t* algo2) {
+    return (strcmp(algo1->name, algo2->name) == 0) &&
+          (algo1->nfactor == algo2->nfactor);
 }

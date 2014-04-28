@@ -286,7 +286,7 @@ char *set_gpu_threads(char *arg)
 		for (i = device; i < MAX_GPUDEVICES; i++)
 			gpus[i].threads = gpus[0].threads;
 	}
-	
+
 	return NULL;
 }
 
@@ -883,7 +883,7 @@ retry: // TODO: refactor
 
 		intvar = curses_input("Set GPU scan intensity (d or "
 							  MIN_INTENSITY_STR " -> "
-							  MAX_INTENSITY_STR ")");		
+							  MAX_INTENSITY_STR ")");
 		if (!intvar) {
 			wlogprint("Invalid input\n");
 			goto retry;
@@ -940,14 +940,14 @@ retry: // TODO: refactor
 	} else if (!strncasecmp(&input, "a", 1)) {
 		int rawintensity;
 		char *intvar;
-		
+
 		if (selected)
 		  selected = curses_int("Select GPU to change raw intensity on");
 		if (selected < 0 || selected >= nDevs) {
 		  wlogprint("Invalid selection\n");
 		  goto retry;
 		}
-		
+
 		intvar = curses_input("Set raw GPU scan intensity (" MIN_RAWINTENSITY_STR " -> " MAX_RAWINTENSITY_STR ")");
 		if (!intvar) {
 		  wlogprint("Invalid input\n");
@@ -1003,7 +1003,7 @@ static _clState *clStates[MAX_GPUDEVICES];
 #define CL_SET_ARG(var) status |= clSetKernelArg(*kernel, num++, sizeof(var), (void *)&var)
 #define CL_SET_VARG(args, var) status |= clSetKernelArg(*kernel, num++, args * sizeof(uint), (void *)var)
 
-static cl_int queue_scrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
+static cl_int queue_scrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, algorithm_t *algorithm)
 {
 	unsigned char *midstate = blk->work->midstate;
 	cl_kernel *kernel = &clState->kernel;
@@ -1040,7 +1040,7 @@ static cl_int queue_scrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
 	return status;
 }
 
-static cl_int queue_sph_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
+static cl_int queue_sph_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, __maybe_unused algorithm_t *algorithm)
 {
 	unsigned char *midstate = blk->work->midstate;
 	cl_kernel *kernel = &clState->kernel;
@@ -1134,6 +1134,8 @@ select_cgpu:
 		cgtime(&thr->sick);
 		if (!pthread_cancel(thr->pth)) {
 			applog(LOG_WARNING, "Thread %d still exists, killing it off", thr_id);
+			pthread_join(thr->pth, NULL);
+			thr->cgpu->drv->thread_shutdown(thr);
 		} else
 			applog(LOG_WARNING, "Thread %d no longer exists", thr_id);
 	}
@@ -1160,7 +1162,7 @@ select_cgpu:
 		//free(clState);
 
 		applog(LOG_INFO, "Reinit GPU thread %d", thr_id);
-		clStates[thr_id] = initCl(virtual_gpu, name, sizeof(name));
+		clStates[thr_id] = initCl(virtual_gpu, name, sizeof(name), &cgpu->algorithm);
 		if (!clStates[thr_id]) {
 			applog(LOG_ERR, "Failed to reinit GPU thread %d", thr_id);
 			goto select_cgpu;
@@ -1229,6 +1231,7 @@ static void opencl_detect(bool hotplug)
 			cgpu->threads = 1;
 #endif
 		cgpu->virtual_gpu = i;
+		cgpu->algorithm = default_algorithm;
 		add_cgpu(cgpu);
 	}
 
@@ -1278,7 +1281,7 @@ static void get_opencl_statline(char *buf, size_t bufsiz, struct cgpu_info *gpu)
 }
 
 struct opencl_thread_data {
-	cl_int (*queue_kernel_parameters)(_clState *, dev_blk_ctx *, cl_uint);
+	cl_int (*queue_kernel_parameters)(_clState *, dev_blk_ctx *, cl_uint, algorithm_t *);
 	uint32_t *res;
 };
 
@@ -1304,7 +1307,7 @@ static bool opencl_thread_prepare(struct thr_info *thr)
 
 	strcpy(name, "");
 	applog(LOG_INFO, "Init GPU thread %i GPU %i virtual GPU %i", i, gpu, virtual_gpu);
-	clStates[i] = initCl(virtual_gpu, name, sizeof(name));
+	clStates[i] = initCl(virtual_gpu, name, sizeof(name), &cgpu->algorithm);
 	if (!clStates[i]) {
 #ifdef HAVE_CURSES
 		if (use_curses)
@@ -1359,7 +1362,7 @@ static bool opencl_thread_init(struct thr_info *thr)
 		return false;
 	}
 
-	if (ALGO_QUARKCOIN <= algorithm->algo && algorithm->algo <= ALGO_GROESTLCOIN)
+	if (ALGO_QUARKCOIN <= gpu->algorithm.algo && gpu->algorithm.algo <= ALGO_GROESTLCOIN)
 		thrdata->queue_kernel_parameters = &queue_sph_kernel;
 	else
 		thrdata->queue_kernel_parameters = &queue_scrypt_kernel;
@@ -1435,7 +1438,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 	if (hashes > gpu->max_hashes)
 		gpu->max_hashes = hashes;
 
-	status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0]);
+	status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0], &gpu->algorithm);
 	if (unlikely(status != CL_SUCCESS)) {
 		applog(LOG_ERR, "Error: clSetKernelArg of all params failed.");
 		return -1;
@@ -1445,7 +1448,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 		size_t global_work_offset[1];
 
 		global_work_offset[0] = work->blk.nonce;
-		if (algorithm->algo == ALGO_SCRYPT_JANE)
+		if (gpu->algorithm.algo == ALGO_SCRYPT_JANE)
 			applog(LOG_DEBUG, "Nonce: %x, Global work size: %x, local work size: %x", work->blk.nonce, (unsigned)globalThreads[0], (unsigned)localThreads[0]);
 
 		status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, global_work_offset,
@@ -1465,7 +1468,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 		return -1;
 	}
 
-	if (algorithm->algo == ALGO_SCRYPT_JANE) {
+	if (gpu->algorithm.algo == ALGO_SCRYPT_JANE) {
 		uint32_t *o;
 		uint32_t target;
 		o = thrdata->res;
@@ -1500,15 +1503,25 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 	return hashes;
 }
 
+// Cleanup OpenCL memory on the GPU
+// Note: This function is not thread-safe (clStates modification not atomic)
 static void opencl_thread_shutdown(struct thr_info *thr)
 {
 	const int thr_id = thr->id;
 	_clState *clState = clStates[thr_id];
+	clStates[thr_id] = NULL;
 
-	clReleaseKernel(clState->kernel);
-	clReleaseProgram(clState->program);
-	clReleaseCommandQueue(clState->commandQueue);
-	clReleaseContext(clState->context);
+	if (clState) {
+		clFinish(clState->commandQueue);
+		clReleaseMemObject(clState->outputBuffer);
+		clReleaseMemObject(clState->CLbuffer0);
+		clReleaseMemObject(clState->padbuffer8);
+		clReleaseKernel(clState->kernel);
+		clReleaseProgram(clState->program);
+		clReleaseCommandQueue(clState->commandQueue);
+		clReleaseContext(clState->context);
+		free(clState);
+	}
 }
 
 struct device_drv opencl_drv = {
