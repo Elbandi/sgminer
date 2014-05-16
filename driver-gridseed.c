@@ -49,8 +49,8 @@ typedef struct s_gridseed_info {
 	enum sub_ident	ident;
 	uint32_t	fw_version;
 	struct timeval	scanhash_time;
-	int		nonce_count[8];  // per chip
-	int		error_count[8];  // per chip
+	int		nonce_count[GRIDSEED_MAX_CHIPS];  // per chip
+	int		error_count[GRIDSEED_MAX_CHIPS];  // per chip
 	char		*serial;
 	// options
 	int		baud;
@@ -441,7 +441,7 @@ another:
 	}
 	else if (strcasecmp(p, "chips")==0) {
 		info->chips = (tmp != 0) ? tmp : info->chips;
-		info->chips = MAX(0, MIN(8, info->chips));
+		info->chips = MAX(0, MIN(GRIDSEED_MAX_CHIPS, info->chips));
 	}
 	else if (strcasecmp(p, "voltage")==0) {
 		info->voltage = (tmp != 0) ? tmp : info->voltage;
