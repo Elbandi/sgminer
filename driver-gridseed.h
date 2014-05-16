@@ -34,6 +34,9 @@
 
 #endif
 
+void manage_gridseed(void);
+extern bool have_gridseed;
+
 extern struct device_drv gridseed_drv;
 
 #endif /* INCLUDE_DRIVER_GRIDSEED_H */

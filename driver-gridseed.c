@@ -12,6 +12,10 @@
 
 #include "config.h"
 
+#ifdef HAVE_CURSES
+#include <curses.h>
+#endif
+
 #include <limits.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -44,6 +48,13 @@
 #include "util.h"
 
 static const char *gridseed_version = "v3.8.5.20140210.02";
+
+#ifdef HAVE_CURSES
+extern WINDOW *mainwin, *statuswin, *logwin;
+extern void enable_curses(void);
+#endif
+
+extern bool opt_loginput;
 
 typedef struct s_gridseed_info {
 	enum sub_ident	ident;
@@ -738,6 +749,7 @@ static bool gridseed_detect_one(libusb_device *dev, struct usb_find_devices *fou
 {
 	struct cgpu_info *gridseed;
 	GRIDSEED_INFO *info;
+	struct timeval now;
 	int err, wrote, def_freq_inx;
 	unsigned char rbuf[GRIDSEED_READ_SIZE];
 #if 0
@@ -809,10 +821,15 @@ static bool gridseed_detect_one(libusb_device *dev, struct usb_find_devices *fou
 
 	gc3355_init(gridseed, info);
 
+	cgtime(&now);
+	get_datestamp(gridseed->init, sizeof(gridseed->init), &now);
+
 	gridseed->algorithm = default_algorithm;
 
 	if (!add_cgpu(gridseed))
 		goto unshin;
+
+	have_gridseed = true;
 
 	return true;
 
@@ -837,6 +854,187 @@ static bool gridseed_send_task(struct cgpu_info *gridseed, struct work *work)
 	memcpy(cmd+152, "\x12\x34\x56\x78", 4);  // taskid
 	return (gc3355_write_data(gridseed, cmd, sizeof(cmd)) == 0);
 }
+#if defined(HAVE_CURSES)
+void manage_gridseed(void)
+{
+	struct thr_info *thr;
+	int selected, gs, i;
+	char checkin[40];
+	char input;
+
+	opt_loginput = true;
+	immedok(logwin, true);
+	clear_logwin();
+retry: // TODO: refactor
+
+	for (gs = 0; gs < total_devices; gs++) {
+		struct cgpu_info *gridseed = get_devices(gs);
+		GRIDSEED_INFO *info = (GRIDSEED_INFO*)(gridseed->device_data);
+		double displayed_rolling, displayed_total;
+		bool mhash_base = true;
+
+		if (!gridseed || gridseed->usbinfo.nodev) continue;
+
+		displayed_rolling = gridseed->rolling;
+		displayed_total = gridseed->total_mhashes / total_secs;
+		if (displayed_rolling < 1) {
+			displayed_rolling *= 1000;
+			displayed_total *= 1000;
+			mhash_base = false;
+		}
+
+		wlog("GSD %d: %.1f / %.1f %sh/s | A:%d  R:%d  HW:%d  U:%.2f/m\n",
+			gs, displayed_rolling, displayed_total, mhash_base ? "M" : "K",
+			gridseed->accepted, gridseed->rejected, gridseed->hw_errors,
+			gridseed->utility);
+
+		wlog("Chip frequency: %d\n", info->freq);
+
+		int nlen = 16 * info->chips; // FIXME
+		char *logline = (char *)malloc(nlen);
+		if (unlikely(!logline))
+			quithere(1, "Failed to malloc");
+		strcpy(logline, "Nonce:");
+		for (i = 0; i < info->chips; ++i) {
+			tailsprintf(logline, nlen, " %d", info->nonce_count[i]);
+			if (info->error_count[i])
+				tailsprintf(logline, nlen, "[%d]", info->error_count[i]);
+		}
+		tailsprintf(logline, nlen, "\n");
+		_wlog(logline);
+		free(logline);
+
+		wlog("Last initialised: %s\n", gridseed->init);
+		for (i = 0; i < mining_threads; i++) {
+			thr = get_thread(i);
+			if (thr->cgpu != gridseed)
+				continue;
+			get_datestamp(checkin, sizeof(checkin), &thr->last);
+			displayed_rolling = thr->rolling;
+			if (!mhash_base)
+				displayed_rolling *= 1000;
+			wlog("Thread %d: %.1f %sh/s %s ", i, displayed_rolling, mhash_base ? "M" : "K" , gridseed->deven != DEV_DISABLED ? "Enabled" : "Disabled");
+			switch (gridseed->status) {
+				default:
+				case LIFE_WELL:
+					wlog("ALIVE");
+					break;
+				case LIFE_SICK:
+					wlog("SICK reported in %s", checkin);
+					break;
+				case LIFE_DEAD:
+					wlog("DEAD reported in %s", checkin);
+					break;
+				case LIFE_INIT:
+				case LIFE_NOSTART:
+					wlog("Never started");
+					break;
+			}
+			if (thr->pause)
+				wlog(" paused");
+			wlog("\n");
+		}
+		wlog("\n");
+	}
+
+	wlogprint("[E]nable  [D]isable  [F]requency\n");
+
+	wlogprint("Or press any other key to continue\n");
+	logwin_update();
+	input = getch();
+
+	if (nDevs == 1)
+		selected = 0;
+	else
+		selected = -1;
+	if (!strncasecmp(&input, "e", 1)) {
+		struct cgpu_info *gridseed;
+
+		if (selected)
+			selected = curses_int("Select GSD to enable");
+		if (selected < 0 || selected >= total_devices) {
+			wlogprint("Invalid selection\n");
+			goto retry;
+		}
+		gridseed = get_devices(selected);
+		if (gridseed->deven != DEV_DISABLED) {
+			wlogprint("Device already enabled\n");
+			goto retry;
+		}
+		gridseed->deven = DEV_ENABLED;
+
+		for (i = 0; i < mining_threads; ++i) {
+			thr = get_thread(i);
+			gridseed = thr->cgpu;
+			if (gridseed->drv->drv_id != DRIVER_gridseed)
+				continue;
+			if (dev_from_id(i) != selected)
+				continue;
+			// ???
+			if (gridseed->status != LIFE_WELL) {
+				wlogprint("Must restart device before enabling it");
+				goto retry;
+			}
+			applog(LOG_DEBUG, "Pushing sem post to thread %d", thr->id);
+
+			cgsem_post(&thr->sem);
+		}
+
+		goto retry;
+	} if (!strncasecmp(&input, "d", 1)) {
+		struct cgpu_info *gridseed;
+		if (selected)
+			selected = curses_int("Select GSD to disable");
+		if (selected < 0 || selected >= total_devices) {
+			wlogprint("Invalid selection\n");
+			goto retry;
+		}
+		gridseed = get_devices(selected);
+		if (gridseed->deven == DEV_DISABLED) {
+			wlogprint("Device already disabled\n");
+			goto retry;
+		}
+		gridseed->deven = DEV_DISABLED;
+		goto retry;
+	} if (!strncasecmp(&input, "f", 1)) {
+		int freq, freq_idx;
+		char *intvar;
+		struct cgpu_info *gridseed;
+		GRIDSEED_INFO *info;
+
+		if (selected)
+			selected = curses_int("Select GSD to change frequency on");
+		if (selected < 0 || selected >= total_devices) {
+			wlogprint("Invalid selection\n");
+			goto retry;
+		}
+
+		intvar = curses_input("Set frequency");
+		if (!intvar) {
+			wlogprint("Invalid input\n");
+			goto retry;
+		}
+		freq = atoi(intvar);
+		free(intvar);
+		freq_idx = gc3355_find_freq_index(freq);
+		gridseed = get_devices(selected);
+		info = (GRIDSEED_INFO*)(gridseed->device_data);
+		info->freq = opt_frequency[freq_idx];
+		memcpy(info->freq_cmd, bin_frequency[freq_idx], 8);
+		gc3355_set_core_freq(gridseed);
+		wlogprint("Frequency on gsd %d set to %d\n", selected, freq);
+		goto retry;
+	} else
+		clear_logwin();
+
+	immedok(logwin, false);
+	opt_loginput = false;
+}
+#else
+void manage_gridseed(void)
+{
+}
+#endif
 
 /*========== functions for struct device_drv ===========*/
 

@@ -133,6 +133,7 @@ int zombie_devs;
 static int most_devices;
 struct cgpu_info **devices;
 bool have_opencl;
+bool have_gridseed = false;
 int mining_threads;
 
 #ifdef HAVE_CURSES
@@ -2419,8 +2420,8 @@ static void curses_print_status(void)
 	wattroff(statuswin, A_BOLD);
 
 	wattron(statuswin, menu_attr);
-	cg_mvwprintw(statuswin, ++line, 0, "[P]ool management %s[S]ettings [D]isplay options [Q]uit",
-		have_opencl ? "[G]PU management " : "");
+	cg_mvwprintw(statuswin, ++line, 0, "[P]ool management %s%s[S]ettings [D]isplay options [Q]uit",
+		have_opencl ? "[G]PU management " : "", have_gridseed ? "G[r]idseed management " : "");
 	wattroff(statuswin, menu_attr);
 
 	cg_mvwprintw(statuswin, ++line, 0, "%s", statusline);
@@ -5219,6 +5220,8 @@ static void *input_thread(void __maybe_unused *userdata)
 			display_pools();
 		else if (!strncasecmp(&input, "s", 1))
 			set_options();
+		else if (have_gridseed && !strncasecmp(&input, "r", 1))
+			manage_gridseed();
 		else if (have_opencl && !strncasecmp(&input, "g", 1))
 			manage_gpu();
 		if (opt_realquiet) {
