@@ -1,8 +1,6 @@
 #ifndef OCL_H
 #define OCL_H
 
-#include "config.h"
-
 #include <stdbool.h>
 #ifdef __APPLE_CC__
 #include <OpenCL/opencl.h>

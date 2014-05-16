@@ -75,11 +75,6 @@ char *curly = ":D";
 	#include <sys/wait.h>
 #endif
 
-#ifdef GIT_VERSION
-#undef VERSION
-#define VERSION GIT_VERSION
-#endif
-
 struct strategies strategies[] = {
 	{ "Failover" },
 	{ "Round Robin" },

@@ -33,6 +33,11 @@ extern char *curly;
 # include <netdb.h>
 #endif
 
+#ifdef GIT_VERSION
+#undef VERSION
+#define VERSION GIT_VERSION
+#endif
+
 #ifdef USE_USBUTILS
 #include <semaphore.h>
 #endif
