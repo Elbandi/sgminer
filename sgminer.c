@@ -612,7 +612,7 @@ struct pool *add_pool(void)
 	pool->rpc_proxy = NULL;
 	pool->quota = 1;
 	adjust_quota_gcd();
-	pool->extranonce_subscribe = true;
+	pool->extranonce_subscribe = false;
 
 	pool->description = "";
 
@@ -1006,12 +1006,12 @@ static char *set_userpass(const char *arg)
 	return NULL;
 }
 
-static char *set_no_extranonce_subscribe(char *arg)
+static char *set_extranonce_subscribe(char *arg)
 {
 	struct pool *pool = get_current_pool();
 
-	applog(LOG_DEBUG, "Disable extranonce subscribe on %d", pool->pool_no);
-	opt_set_invbool(&pool->extranonce_subscribe);
+	applog(LOG_DEBUG, "Enable extranonce subscribe on %d", pool->pool_no);
+	opt_set_bool(&pool->extranonce_subscribe);
 
 	return NULL;
 }
@@ -1448,9 +1448,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--no-submit-stale",
 			opt_set_invbool, &opt_submit_stale,
 		        "Don't submit shares if they are detected as stale"),
-	OPT_WITHOUT_ARG("--no-extranonce-subscribe",
-			set_no_extranonce_subscribe, NULL,
-			"Disable 'extranonce' stratum subscribe"),
+	OPT_WITHOUT_ARG("--extranonce-subscribe",
+			set_extranonce_subscribe, NULL,
+			"Enable 'extranonce' stratum subscribe"),
 	OPT_WITH_ARG("--pass|-p",
 		     set_pass, NULL, NULL,
 		     "Password for bitcoin JSON-RPC server"),
@@ -4513,8 +4513,8 @@ void write_config(FILE *fcfg)
 				pool->rpc_proxy ? "|" : "",
 				json_escape(pool->rpc_url));
 		}
-		if (!pool->extranonce_subscribe)
-			fputs("\n\t\t\"no-extranonce-subscribe\" : true,", fcfg);
+		if (pool->extranonce_subscribe)
+			fputs("\n\t\t\"extranonce-subscribe\" : true,", fcfg);
 		fprintf(fcfg, "\n\t\t\"user\" : \"%s\",", json_escape(pool->rpc_user));
 		fprintf(fcfg, "\n\t\t\"pass\" : \"%s\"\n\t}", json_escape(pool->rpc_pass));
 		}
