@@ -481,48 +481,48 @@ next:
 static bool get_freq(GRIDSEED_INFO *info, char *options)
 {
 	char *ss, *p, *end, *comma, *colon;
-        int tmp;
+	int tmp;
 
-        if (options == NULL)
-                return false;
+	if (options == NULL)
+		return false;
 
-        applog(LOG_NOTICE, "GridSeed freq options: '%s'", options);
-        ss = strdup(options);
-        p  = ss;
-        end = p + strlen(p);
+	applog(LOG_NOTICE, "GridSeed freq options: '%s'", options);
+	ss = strdup(options);
+	p  = ss;
+	end = p + strlen(p);
 
 another:
-        comma = strchr(p, ',');
-        if (comma != NULL)
-                *comma = '\0';
-        colon = strchr(p, '=');
-        if (colon == NULL)
-                goto next;
-        *colon = '\0';
+	comma = strchr(p, ',');
+	if (comma != NULL)
+		*comma = '\0';
+	colon = strchr(p, '=');
+	if (colon == NULL)
+		goto next;
+	*colon = '\0';
 
-        tmp = atoi(colon+1);
-        if (strcasecmp(p, info->serial)==0) {
-                applog(LOG_NOTICE, "%s unique frequency: %i", p, tmp);
-                int i;
-                for(i=0; opt_frequency[i] != -1; i++) {
-                        if (tmp == opt_frequency[i])
-                                info->freq = tmp;
-                }
-        }
+	tmp = atoi(colon+1);
+	if (strcasecmp(p, info->serial)==0) {
+		applog(LOG_NOTICE, "%s unique frequency: %i", p, tmp);
+		int i;
+		for(i=0; opt_frequency[i] != -1; i++) {
+			if (tmp == opt_frequency[i])
+				info->freq = tmp;
+		}
+	}
 
 next:
-        if (comma != NULL) {
-                p = comma + 1;
-                if (p < end)
-                        goto another;
-        }
-        free(ss);
+	if (comma != NULL) {
+		p = comma + 1;
+		if (p < end)
+			goto another;
+	}
+	free(ss);
 
-        int freq_idx = gc3355_find_freq_index(info->freq);
-        info->freq = opt_frequency[freq_idx];
-        memcpy(info->freq_cmd, bin_frequency[freq_idx], 8);
+	int freq_idx = gc3355_find_freq_index(info->freq);
+	info->freq = opt_frequency[freq_idx];
+	memcpy(info->freq_cmd, bin_frequency[freq_idx], 8);
 
-        return true;
+	return true;
 }
 
 static int gridseed_cp210x_init(struct cgpu_info *gridseed, int interface)
