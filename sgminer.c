@@ -174,6 +174,7 @@ int opt_tcp_keepalive;
 #ifdef USE_GRIDSEED
 char *opt_gridseed_options = NULL;
 char *opt_gridseed_freq = NULL;
+char *opt_gridseed_chips = NULL;
 #endif
 #ifdef USE_USBUTILS
 char *opt_usb_select = NULL;
@@ -1181,21 +1182,6 @@ static char *set_api_mcast_des(const char *arg)
 	return NULL;
 }
 
-#ifdef USE_GRIDSEED
-static char *set_gridseed_options(const char *arg)
-{
-	opt_set_charp(arg, &opt_gridseed_options);
-
-	return NULL;
-}
-static char *set_gridseed_freq(const char *arg)
-{
-        opt_set_charp(arg, &opt_gridseed_freq);
-
-        return NULL;
-}
-#endif
-
 #ifdef USE_USBUTILS
 static char *set_usb_select(const char *arg)
 {
@@ -1391,11 +1377,14 @@ static struct opt_table opt_config_table[] = {
 		     "Override kernel to use - one value or comma separated"),
 #ifdef USE_GRIDSEED
 	OPT_WITH_ARG("--gridseed-options",
-		     set_gridseed_options, NULL, NULL,
-		     opt_hidden),
-        OPT_WITH_ARG("--gridseed-freq",
-                     set_gridseed_freq, NULL, NULL,
-                     opt_hidden),
+		     opt_set_charp, NULL, &opt_gridseed_options,
+		     "Gridseed options"),
+	OPT_WITH_ARG("--gridseed-freq",
+		     opt_set_charp, NULL, &opt_gridseed_freq,
+		     "Set gridseed chip frequency"),
+	OPT_WITH_ARG("--gridseed-chips",
+		     opt_set_charp, NULL, &opt_gridseed_chips,
+		     "Set gridseed chips count"),
 #endif
 	OPT_WITHOUT_ARG("--load-balance",
 			set_loadbalance, &pool_strategy,

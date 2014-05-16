@@ -1011,6 +1011,7 @@ extern bool opt_worktime;
 #ifdef USE_GRIDSEED
 extern char *opt_gridseed_options;
 extern char *opt_gridseed_freq;
+extern char *opt_gridseed_chips;
 #endif
 #ifdef USE_USBUTILS
 extern char *opt_usb_select;
