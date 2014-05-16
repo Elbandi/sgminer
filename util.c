@@ -1748,8 +1748,10 @@ static bool parse_reconnect(struct pool *pool, json_t *val)
 	free(tmp);
 	mutex_unlock(&pool->stratum_lock);
 
-	if (!restart_stratum(pool))
+	if (!restart_stratum(pool)) {
+		pool_failed(pool);
 		return false;
+	}
 
 	return true;
 }
@@ -1979,6 +1981,8 @@ bool auth_stratum(struct pool *pool)
 			ss = strdup("(unknown reason)");
 		applog(LOG_INFO, "%s JSON stratum auth failed: %s", get_pool_name(pool), ss);
 		free(ss);
+
+		suspend_stratum(pool);
 
 		goto out;
 	}
