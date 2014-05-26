@@ -888,6 +888,7 @@ retry: // TODO: refactor
 			gridseed->accepted, gridseed->rejected, gridseed->hw_errors,
 			gridseed->utility);
 
+		wlog("Firmware: %08X\n", info->fw_version);
 		wlog("Chip frequency: %d\n", info->freq);
 
 		int nlen = 16 * info->chips; // FIXME
