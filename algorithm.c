@@ -50,6 +50,7 @@ static algorithm_t algos[] = {
 #define A_DARK(a, b, c, d) \
 	{ a, b, 0, 10, c, 1, 1, 0x00000000ffff0000ULL, 0xFFFFULL, d}
 	A_DARK( "darkcoin",            "darkcoin",             ALGO_DARKCOIN,                  darkcoin_regenhash),
+	A_DARK( "darkcoinmod",         "darkcoinmod",          ALGO_DARKCOINMOD,               darkcoin_regenhash),
 	A_DARK( "myriadcoin-groestl",  "myriadcoin-groestl",   ALGO_MYRIADCOIN_GROESTL,        myriadcoin_groestl_regenhash),
 	A_DARK( "twecoin",             "twecoin",              ALGO_TWECOIN,                   twecoin_regenhash),
 	A_DARK( "marucoin",            "marucoin",             ALGO_MARUCOIN,                  marucoin_regenhash),

@@ -13,10 +13,22 @@
 typedef struct {
 	cl_context context;
 	cl_kernel kernel;
+	cl_kernel kernel_blake;
+	cl_kernel kernel_bmw;
+	cl_kernel kernel_groestl;
+	cl_kernel kernel_skein;
+	cl_kernel kernel_jh;
+	cl_kernel kernel_keccak;
+	cl_kernel kernel_luffa;
+	cl_kernel kernel_cubehash;
+	cl_kernel kernel_shavite;
+	cl_kernel kernel_simd;
+	cl_kernel kernel_echo;
 	cl_command_queue commandQueue;
 	cl_program program;
 	cl_mem outputBuffer;
 	cl_mem CLbuffer0;
+	cl_mem hash_buffer;
 	cl_mem padbuffer8;
 	size_t padbufsize;
 	void * cldata;

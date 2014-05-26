@@ -1002,6 +1002,7 @@ static _clState *clStates[MAX_GPUDEVICES];
 #define CL_SET_BLKARG(blkvar) status |= clSetKernelArg(*kernel, num++, sizeof(uint), (void *)&blk->blkvar)
 #define CL_SET_ARG(var) status |= clSetKernelArg(*kernel, num++, sizeof(var), (void *)&var)
 #define CL_SET_VARG(args, var) status |= clSetKernelArg(*kernel, num++, args * sizeof(uint), (void *)var)
+#define CL_SET_ARG_N(n,var) status |= clSetKernelArg(*kernel, n, sizeof(var), (void *)&var)
 
 static cl_int queue_scrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, algorithm_t *algorithm)
 {
@@ -1061,6 +1062,49 @@ static cl_int queue_sph_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unus
 	return status;
 }
 
+static cl_int queue_x11mod_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, __maybe_unused algorithm_t *algorithm)
+{
+	unsigned char *midstate = blk->work->midstate;
+	cl_kernel *kernel;
+	cl_ulong le_target;
+	cl_int status = 0;
+	uint32_t data[20];
+
+	le_target = *(cl_ulong *)(blk->work->device_target + 24);
+	flip80(data, blk->work->data);
+	clState->cldata = data;
+	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
+
+//clbuffer, hashes
+	kernel = &clState->kernel_blake;
+	CL_SET_ARG_N(0,clState->CLbuffer0);
+	CL_SET_ARG_N(1,clState->hash_buffer);
+	kernel = &clState->kernel_bmw;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_groestl;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_skein;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_jh;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_keccak;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_luffa;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_cubehash;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_shavite;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_simd;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+//hashes, output, target
+	kernel = &clState->kernel_echo;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	CL_SET_ARG_N(1,clState->outputBuffer);
+	CL_SET_ARG_N(2,le_target);
+
+	return status;
+}
 
 static void set_threads_hashes(unsigned int vectors, unsigned int compute_shaders, int64_t *hashes, size_t *globalThreads,
 			       unsigned int minthreads, __maybe_unused int *intensity, __maybe_unused int *xintensity, __maybe_unused int *rawintensity)
@@ -1362,7 +1406,9 @@ static bool opencl_thread_init(struct thr_info *thr)
 		return false;
 	}
 
-	if (ALGO_QUARKCOIN <= gpu->algorithm.algo && gpu->algorithm.algo <= ALGO_GROESTLCOIN)
+	if (ALGO_DARKCOINMOD == gpu->algorithm.algo)
+		thrdata->queue_kernel_parameters = &queue_x11mod_kernel;
+	else if (ALGO_QUARKCOIN <= gpu->algorithm.algo && gpu->algorithm.algo <= ALGO_GROESTLCOIN)
 		thrdata->queue_kernel_parameters = &queue_sph_kernel;
 	else
 		thrdata->queue_kernel_parameters = &queue_scrypt_kernel;
@@ -1397,6 +1443,14 @@ static bool opencl_prepare_work(struct thr_info __maybe_unused *thr, struct work
 }
 
 extern int opt_dynamic_interval;
+
+#define CL_ENQUEUE_KERNEL(KL, GWO) \
+	status = clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel_##KL, 1, GWO, globalThreads, localThreads, 0, NULL, NULL); \
+	if (unlikely(status != CL_SUCCESS)) { \
+		applog(LOG_ERR, "Error %d: Enqueueing kernel #KL onto command queue. (clEnqueueNDRangeKernel)", status); \
+		return -1; \
+	}
+
 
 static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 				int64_t __maybe_unused max_nonce)
@@ -1444,21 +1498,52 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 		return -1;
 	}
 
-	if (clState->goffset) {
-		size_t global_work_offset[1];
+	if (gpu->algorithm.algo == ALGO_DARKCOINMOD) {
+		if (clState->goffset) {
+			size_t global_work_offset[1];
+			global_work_offset[0] = work->blk.nonce;
 
-		global_work_offset[0] = work->blk.nonce;
-		if (gpu->algorithm.algo == ALGO_SCRYPT_JANE)
-			applog(LOG_DEBUG, "Nonce: %x, Global work size: %x, local work size: %x", work->blk.nonce, (unsigned)globalThreads[0], (unsigned)localThreads[0]);
+			CL_ENQUEUE_KERNEL(blake, global_work_offset);
+			CL_ENQUEUE_KERNEL(bmw, global_work_offset);
+			CL_ENQUEUE_KERNEL(groestl, global_work_offset);
+			CL_ENQUEUE_KERNEL(skein, global_work_offset);
+			CL_ENQUEUE_KERNEL(jh, global_work_offset);
+			CL_ENQUEUE_KERNEL(keccak, global_work_offset);
+			CL_ENQUEUE_KERNEL(luffa, global_work_offset);
+			CL_ENQUEUE_KERNEL(cubehash, global_work_offset);
+			CL_ENQUEUE_KERNEL(shavite, global_work_offset);
+			CL_ENQUEUE_KERNEL(simd, global_work_offset)
+			CL_ENQUEUE_KERNEL(echo, global_work_offset);
+		} else {
+			CL_ENQUEUE_KERNEL(blake, NULL);
+			CL_ENQUEUE_KERNEL(bmw, NULL);
+			CL_ENQUEUE_KERNEL(groestl, NULL);
+			CL_ENQUEUE_KERNEL(skein, NULL);
+			CL_ENQUEUE_KERNEL(jh, NULL);
+			CL_ENQUEUE_KERNEL(keccak, NULL);
+			CL_ENQUEUE_KERNEL(luffa, NULL);
+			CL_ENQUEUE_KERNEL(cubehash, NULL);
+			CL_ENQUEUE_KERNEL(shavite, NULL);
+			CL_ENQUEUE_KERNEL(simd, NULL)
+			CL_ENQUEUE_KERNEL(echo, NULL);
+		}
+	} else {
+		if (clState->goffset) {
+			size_t global_work_offset[1];
 
-		status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, global_work_offset,
-						globalThreads, localThreads, 0,  NULL, NULL);
-	} else
-		status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL,
-						globalThreads, localThreads, 0,  NULL, NULL);
-	if (unlikely(status != CL_SUCCESS)) {
-		applog(LOG_ERR, "Error %d: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)", status);
-		return -1;
+			global_work_offset[0] = work->blk.nonce;
+			if (gpu->algorithm.algo == ALGO_SCRYPT_JANE)
+				applog(LOG_DEBUG, "Nonce: %x, Global work size: %x, local work size: %x", work->blk.nonce, (unsigned)globalThreads[0], (unsigned)localThreads[0]);
+
+			status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, global_work_offset,
+							globalThreads, localThreads, 0,  NULL, NULL);
+		} else
+			status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL,
+							globalThreads, localThreads, 0,  NULL, NULL);
+		if (unlikely(status != CL_SUCCESS)) {
+			applog(LOG_ERR, "Error %d: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)", status);
+			return -1;
+		}
 	}
 
 	status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0,
@@ -1505,6 +1590,9 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 
 // Cleanup OpenCL memory on the GPU
 // Note: This function is not thread-safe (clStates modification not atomic)
+#define CL_RELEASE_KERNEL(name) \
+	if (clState->name) clReleaseKernel(clState->name)
+
 static void opencl_thread_shutdown(struct thr_info *thr)
 {
 	const int thr_id = thr->id;
@@ -1516,7 +1604,18 @@ static void opencl_thread_shutdown(struct thr_info *thr)
 		clReleaseMemObject(clState->outputBuffer);
 		clReleaseMemObject(clState->CLbuffer0);
 		clReleaseMemObject(clState->padbuffer8);
-		clReleaseKernel(clState->kernel);
+		CL_RELEASE_KERNEL(kernel_blake);
+		CL_RELEASE_KERNEL(kernel_bmw);
+		CL_RELEASE_KERNEL(kernel_groestl);
+		CL_RELEASE_KERNEL(kernel_skein);
+		CL_RELEASE_KERNEL(kernel_jh);
+		CL_RELEASE_KERNEL(kernel_keccak);
+		CL_RELEASE_KERNEL(kernel_luffa);
+		CL_RELEASE_KERNEL(kernel_cubehash);
+		CL_RELEASE_KERNEL(kernel_shavite);
+		CL_RELEASE_KERNEL(kernel_simd);
+		CL_RELEASE_KERNEL(kernel_echo);
+		CL_RELEASE_KERNEL(kernel);
 		clReleaseProgram(clState->program);
 		clReleaseCommandQueue(clState->commandQueue);
 		clReleaseContext(clState->context);
