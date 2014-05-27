@@ -41,6 +41,7 @@ static algorithm_t algos[] = {
 	{ a, b, 0, 10, c, 256, 256, 0x000000ffff000000ULL, 0xFFFFFFULL, d}
 	A_QUARK( "quarkcoin", "quarkcoin", ALGO_QUARKCOIN, quarkcoin_regenhash),
 	A_QUARK( "qubitcoin", "qubitcoin", ALGO_QUBITCOIN, qubitcoin_regenhash),
+	A_QUARK( "inkcoin",   "inkcoin",   ALGO_INKCOIN,   inkcoin_regenhash),
 	A_QUARK( "animecoin", "animecoin", ALGO_ANIMECOIN, animecoin_regenhash),
 	A_QUARK( "sifcoin",   "sifcoin",   ALGO_SIFCOIN,   sifcoin_regenhash),
 #undef A_QUARK
@@ -49,7 +50,6 @@ static algorithm_t algos[] = {
 #define A_DARK(a, b, c, d) \
 	{ a, b, 0, 10, c, 1, 1, 0x00000000ffff0000ULL, 0xFFFFULL, d}
 	A_DARK( "darkcoin",            "darkcoin",             ALGO_DARKCOIN,                  darkcoin_regenhash),
-	A_DARK( "inkcoin",             "inkcoin",              ALGO_INKCOIN,                   inkcoin_regenhash),
 	A_DARK( "myriadcoin-groestl",  "myriadcoin-groestl",   ALGO_MYRIADCOIN_GROESTL,        myriadcoin_groestl_regenhash),
 	A_DARK( "twecoin",             "twecoin",              ALGO_TWECOIN,                   twecoin_regenhash),
 	A_DARK( "marucoin",            "marucoin",             ALGO_MARUCOIN,                  marucoin_regenhash),
