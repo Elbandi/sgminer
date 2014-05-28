@@ -59,6 +59,7 @@ static algorithm_t algos[] = {
 #define A_FUGUE(a, b, c, d) \
 	{ a, b, 0, 10, c, 1, 256, 0x00000000ffff0000ULL, 0xFFFFULL, d}
 	A_FUGUE( "fuguecoin",          "fuguecoin",          ALGO_FUGUECOIN,   fuguecoin_regenhash),
+	A_FUGUE( "diamondcoin",        "groestlcoin",        ALGO_DIAMONDCOIN, groestlcoin_regenhash),
 	A_FUGUE( "groestlcoin",        "groestlcoin",        ALGO_GROESTLCOIN, groestlcoin_regenhash),
 #undef A_FUGUE
 	{ NULL, NULL, 0, 0, ALGO_SCRYPT, 0, 0, 0, 0, NULL}
