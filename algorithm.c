@@ -54,6 +54,7 @@ static algorithm_t algos[] = {
 	A_DARK( "myriadcoin-groestl",  "myriadcoin-groestl",   ALGO_MYRIADCOIN_GROESTL,        myriadcoin_groestl_regenhash),
 	A_DARK( "twecoin",             "twecoin",              ALGO_TWECOIN,                   twecoin_regenhash),
 	A_DARK( "marucoin",            "marucoin",             ALGO_MARUCOIN,                  marucoin_regenhash),
+	A_DARK( "marucoinmod",         "marucoinmod",          ALGO_MARUCOINMOD,               marucoin_regenhash),
 #undef A_DARK
 
 	// kernels starting from this will have difficulty calculated by using fuguecoin algorithm

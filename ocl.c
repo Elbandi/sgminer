@@ -335,7 +335,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
 	/////////////////////////////////////////////////////////////////
 	// Create an OpenCL command queue
 	/////////////////////////////////////////////////////////////////
-	if (algorithm->algo == ALGO_DARKCOINMOD)
+	if ((algorithm->algo == ALGO_DARKCOINMOD) || (algorithm->algo == ALGO_MARUCOINMOD))
 		clState->commandQueue = clCreateCommandQueue(clState->context, devices[gpu],
 							     0, &status);
 	else {
@@ -778,6 +778,20 @@ built:
 		CL_CREATE_KERNEL(shavite);
 		CL_CREATE_KERNEL(simd);
 		CL_CREATE_KERNEL(echo);
+	} else if (algorithm->algo == ALGO_MARUCOINMOD) {
+		CL_CREATE_KERNEL(blake);
+		CL_CREATE_KERNEL(bmw);
+		CL_CREATE_KERNEL(groestl);
+		CL_CREATE_KERNEL(skein);
+		CL_CREATE_KERNEL(jh);
+		CL_CREATE_KERNEL(keccak);
+		CL_CREATE_KERNEL(luffa);
+		CL_CREATE_KERNEL(cubehash);
+		CL_CREATE_KERNEL(shavite);
+		CL_CREATE_KERNEL(simd);
+		CL_CREATE_KERNEL(echo);
+		CL_CREATE_KERNEL(hamsi);
+		CL_CREATE_KERNEL(fugue);
 	} else {
 		clState->kernel = clCreateKernel(clState->program, "search", &status);
 		if (status != CL_SUCCESS) {

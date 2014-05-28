@@ -24,6 +24,8 @@ typedef struct {
 	cl_kernel kernel_shavite;
 	cl_kernel kernel_simd;
 	cl_kernel kernel_echo;
+	cl_kernel kernel_hamsi;
+	cl_kernel kernel_fugue;
 	cl_command_queue commandQueue;
 	cl_program program;
 	cl_mem outputBuffer;

@@ -20,6 +20,7 @@ enum algorithm {
     ALGO_MYRIADCOIN_GROESTL,
     ALGO_TWECOIN,
     ALGO_MARUCOIN,
+    ALGO_MARUCOINMOD,
     ALGO_FUGUECOIN, // kernels starting from this will have difficulty calculated by using fuguecoin algorithm
     ALGO_DIAMONDCOIN,
     ALGO_GROESTLCOIN,

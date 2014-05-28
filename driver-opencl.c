@@ -1106,6 +1106,56 @@ static cl_int queue_x11mod_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
 	return status;
 }
 
+static cl_int queue_x13mod_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
+{
+	unsigned char *midstate = blk->work->midstate;
+	cl_kernel *kernel;
+	unsigned int num = 0;
+	cl_ulong le_target;
+	cl_int status = 0;
+	uint32_t data[20];
+
+	le_target = *(cl_ulong *)(blk->work->device_target + 24);
+	flip80(data, blk->work->data);
+	clState->cldata = data;
+	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
+
+//clbuffer, hashes
+	kernel = &clState->kernel_blake;
+	CL_SET_ARG_N(0,clState->CLbuffer0);
+	CL_SET_ARG_N(1,clState->hash_buffer);
+	kernel = &clState->kernel_bmw;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_groestl;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_skein;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_jh;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_keccak;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_luffa;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_cubehash;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_shavite;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_simd;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_echo;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	kernel = &clState->kernel_hamsi;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+//hashes, output, target
+	kernel = &clState->kernel_fugue;
+	CL_SET_ARG_N(0,clState->hash_buffer);
+	CL_SET_ARG_N(1,clState->outputBuffer);
+	CL_SET_ARG_N(2,le_target);
+
+	return status;
+}
+
+
 static void set_threads_hashes(unsigned int vectors, unsigned int compute_shaders, int64_t *hashes, size_t *globalThreads,
 			       unsigned int minthreads, __maybe_unused int *intensity, __maybe_unused int *xintensity, __maybe_unused int *rawintensity)
 {
@@ -1408,6 +1458,8 @@ static bool opencl_thread_init(struct thr_info *thr)
 
 	if (ALGO_DARKCOINMOD == gpu->algorithm.algo)
 		thrdata->queue_kernel_parameters = &queue_x11mod_kernel;
+	else if (ALGO_MARUCOINMOD == gpu->algorithm.algo)
+		thrdata->queue_kernel_parameters = &queue_x13mod_kernel;
 	else if (ALGO_QUARKCOIN <= gpu->algorithm.algo && gpu->algorithm.algo <= ALGO_GROESTLCOIN)
 		thrdata->queue_kernel_parameters = &queue_sph_kernel;
 	else
@@ -1527,6 +1579,39 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 			CL_ENQUEUE_KERNEL(simd, NULL)
 			CL_ENQUEUE_KERNEL(echo, NULL);
 		}
+	} else if (gpu->algorithm.algo == ALGO_MARUCOINMOD) {
+		if (clState->goffset) {
+			size_t global_work_offset[1];
+			global_work_offset[0] = work->blk.nonce;
+
+			CL_ENQUEUE_KERNEL(blake, global_work_offset);
+			CL_ENQUEUE_KERNEL(bmw, global_work_offset);
+			CL_ENQUEUE_KERNEL(groestl, global_work_offset);
+			CL_ENQUEUE_KERNEL(skein, global_work_offset);
+			CL_ENQUEUE_KERNEL(jh, global_work_offset);
+			CL_ENQUEUE_KERNEL(keccak, global_work_offset);
+			CL_ENQUEUE_KERNEL(luffa, global_work_offset);
+			CL_ENQUEUE_KERNEL(cubehash, global_work_offset);
+			CL_ENQUEUE_KERNEL(shavite, global_work_offset);
+			CL_ENQUEUE_KERNEL(simd, global_work_offset)
+			CL_ENQUEUE_KERNEL(echo, global_work_offset);
+			CL_ENQUEUE_KERNEL(hamsi, global_work_offset);
+			CL_ENQUEUE_KERNEL(fugue, global_work_offset);
+		} else {
+			CL_ENQUEUE_KERNEL(blake, NULL);
+			CL_ENQUEUE_KERNEL(bmw, NULL);
+			CL_ENQUEUE_KERNEL(groestl, NULL);
+			CL_ENQUEUE_KERNEL(skein, NULL);
+			CL_ENQUEUE_KERNEL(jh, NULL);
+			CL_ENQUEUE_KERNEL(keccak, NULL);
+			CL_ENQUEUE_KERNEL(luffa, NULL);
+			CL_ENQUEUE_KERNEL(cubehash, NULL);
+			CL_ENQUEUE_KERNEL(shavite, NULL);
+			CL_ENQUEUE_KERNEL(simd, NULL)
+			CL_ENQUEUE_KERNEL(echo, NULL);
+			CL_ENQUEUE_KERNEL(hamsi, NULL);
+			CL_ENQUEUE_KERNEL(fugue, NULL);
+		}
 	} else {
 		if (clState->goffset) {
 			size_t global_work_offset[1];
@@ -1615,6 +1700,8 @@ static void opencl_thread_shutdown(struct thr_info *thr)
 		CL_RELEASE_KERNEL(kernel_shavite);
 		CL_RELEASE_KERNEL(kernel_simd);
 		CL_RELEASE_KERNEL(kernel_echo);
+		CL_RELEASE_KERNEL(kernel_hamsi);
+		CL_RELEASE_KERNEL(kernel_fugue);
 		CL_RELEASE_KERNEL(kernel);
 		clReleaseProgram(clState->program);
 		clReleaseCommandQueue(clState->commandQueue);
