@@ -18,6 +18,10 @@
 #include "miner.h"
 #include "usbutils.h"
 
+static pthread_mutex_t cgusb_lock;
+static pthread_mutex_t cgusbres_lock;
+static cglock_t cgusb_fd_lock;
+
 #define NODEV(err) ((err) == LIBUSB_ERROR_NO_DEVICE || \
 			(err) == LIBUSB_ERROR_PIPE || \
 			(err) == LIBUSB_ERROR_OTHER)
@@ -3291,8 +3295,6 @@ void usb_initialise(void)
 	int bus, dev, lim, i;
 	bool found;
 
-	INIT_LIST_HEAD(&ut_list);
-
 	for (i = 0; i < DRIVER_MAX; i++) {
 		drv_count[i].count = 0;
 		drv_count[i].limit = 999999;
@@ -3787,4 +3789,12 @@ void *usb_resource_thread(void __maybe_unused *userdata)
 	}
 
 	return NULL;
+}
+
+void initialise_usblocks(void)
+{
+	mutex_init(&cgusb_lock);
+	mutex_init(&cgusbres_lock);
+	cglock_init(&cgusb_fd_lock);
+	INIT_LIST_HEAD(&ut_list);
 }

@@ -1037,12 +1037,6 @@ extern int opt_queue;
 extern int opt_scantime;
 extern int opt_expiry;
 
-#ifdef USE_USBUTILS
-extern pthread_mutex_t cgusb_lock;
-extern pthread_mutex_t cgusbres_lock;
-extern cglock_t cgusb_fd_lock;
-#endif
-
 extern algorithm_t default_algorithm;
 
 /* scrypt-jane */
