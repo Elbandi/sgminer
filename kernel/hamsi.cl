@@ -439,3 +439,5 @@ __constant static const sph_u32 alpha_f[] = {
 		c1 = (h[0x1] ^= hamsi_s01); \
 		c0 = (h[0x0] ^= hamsi_s00); \
 	} while (0)
+
+

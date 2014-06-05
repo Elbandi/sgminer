@@ -2,7 +2,8 @@
 
 ## Core
 
-* Scrypt-only refactor and maintenance: Noel Maersk <veox at wemakethings dot net> LfxRFgXzA13TSTxgFGUFEtumv5ShGzAmLw
+* Multiple algorithms and switching: Jan Berdajs <mrbrdo at mrbrdo dot net> 15bULC8snaKAMeFb3xBmmhbWj1xyTmBUfm
+* Scrypt-only refactor: Noel Maersk <veox at wemakethings dot net> LfxRFgXzA13TSTxgFGUFEtumv5ShGzAmLw
 * Core: Martin Danielsen <kalroth {at} gmail _dot_ com> 1DNBcSEENBwDKrcTyTW61ezWhzsPy5imkn
 * Core: Con Kolivas <kernel [at] kolivas {dot} org> 15qSxP1SQcUX3o4nhkfdbgyoWEFMomJ4rZ
 * Core: Luke Dashjr <luke-jr+cgminer @at@ utopios .dot. org> 1QATWksNFGeUJCWBrN4g6hGM178Lovm7Wh
@@ -24,6 +25,7 @@ All current kernels are based on `scrypt`, originally by Colin Percival,
 updated by many others.
 
 * alexkarnew/alexkarold: Alexey Karimov LMqRcHdwnZtTMH6c2kWoxSoKM5KySfaP5C
+* bufius: Bufius VvvmmkYHKGtdr97JLyyZuJ3Th5ayungnjk
 * ckolivas: Con Kolivas <kernel @at@ kolivas }dot{ org> 15qSxP1SQcUX3o4nhkfdbgyoWEFMomJ4rZ
 * psw: Pavel Semjanov LP6GRFvgoMxKA6AW4TVF668cNezEGZvEtr
 * zuikkis: Zuikkis LeXck7EYgxyjw13zNDxZFmmgmWffFvhmSh
@@ -31,7 +33,8 @@ updated by many others.
 
 ## Testing, bug fixes, improvements
 
-* Hot-switching OpenCL kernel (N-Factor): Jan Berdajs <mrbrdo> 15bULC8snaKAMeFb3xBmmhbWj1xyTmBUfm
+* Hot-switching OpenCL kernel (N-Factor): Jan Berdajs <mrbrdo>
+* Michael Fiano <mfiano>
 * Gabriel Devenyi <gdevenyi>
 * Benjamin Herrenschmidt <ozbenh>
 * Joe4782 <Joe4782>
@@ -44,7 +47,7 @@ updated by many others.
 
 ...and many others. See:
 
-* [veox/sgminer](https://github.com/veox/sgminer/graphs/contributors)
+* [sgminer-dev/sgminer](https://github.com/sgminer-dev/sgminer/graphs/contributors)
 
 
 ## Legacy

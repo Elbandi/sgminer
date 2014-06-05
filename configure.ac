@@ -1,8 +1,8 @@
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_maj], [4])
-m4_define([v_min], [1])
-m4_define([v_mic], [271])
+m4_define([v_min], [2])
+m4_define([v_mic], [1])
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_ver], [v_maj.v_min.v_mic])
 m4_define([lt_rev], m4_eval(v_maj + v_min))
@@ -11,7 +11,7 @@ m4_define([lt_age], v_min)
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 
-AC_INIT([sgminer], [v_ver], [veox@wemakethings.net], [sgminer], [https://github.com/veox/sgminer])
+AC_INIT([sgminer], [v_ver], [veox@wemakethings.net], [sgminer], [https://github.com/sgminer-dev/sgminer])
 
 AC_PREREQ(2.59)
 AC_CANONICAL_SYSTEM
@@ -346,12 +346,21 @@ fi
 AM_CONDITIONAL(USE_GIT_VERSION, [test x$usegitver = xyes])
 
 #check execv signature
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([
-		   #include <process.h>
-		   int execv(const char*, char *const*);
-		   ])],
-		   AC_DEFINE([EXECV_2ND_ARG_TYPE], [char* const*], [int execv(const char*, char*const*);]),
-		   AC_DEFINE([EXECV_2ND_ARG_TYPE], [const char* const*], [int execv(const char*, const char*const*);]))
+if test "x$have_linux" == xtrue; then
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([
+           #include <unistd.h>
+           int execv(const char*, char *const*);
+           ])],
+           AC_DEFINE([EXECV_2ND_ARG_TYPE], [char* const*], [int execv(const char*, char*const*);]),
+           AC_DEFINE([EXECV_2ND_ARG_TYPE], [const char* const*], [int execv(const char*, const char*const*);]))
+else
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([
+           #include <process.h>
+           int execv(const char*, char *const*);
+           ])],
+           AC_DEFINE([EXECV_2ND_ARG_TYPE], [char* const*], [int execv(const char*, char*const*);]),
+           AC_DEFINE([EXECV_2ND_ARG_TYPE], [const char* const*], [int execv(const char*, const char*const*);]))
+fi
 
 dnl CCAN wants to know a lot of vars.
 # All the configuration checks.  Regrettably, the __attribute__ checks will

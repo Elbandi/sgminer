@@ -1,30 +1,20 @@
 #ifndef ALGORITHM_H
 #define ALGORITHM_H
 
+#ifdef __APPLE_CC__
+#include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
+
 #include <inttypes.h>
 #include <stdbool.h>
 
-struct work;
+extern void gen_hash(const unsigned char *data, unsigned int len, unsigned char *hash);
 
-enum algorithm {
-    ALGO_SCRYPT, // kernels starting from this will have difficulty calculated by using litecoin algorithm
-    ALGO_NSCRYPT,
-    ALGO_SCRYPT_JANE,
-    ALGO_QUARKCOIN, // kernels starting from this will have difficulty calculated by using quarkcoin algorithm
-    ALGO_QUBITCOIN,
-    ALGO_INKCOIN,
-    ALGO_ANIMECOIN,
-    ALGO_SIFCOIN,
-    ALGO_DARKCOIN, // kernels starting from this will have difficulty calculated by using bitcoin algorithm
-    ALGO_DARKCOINMOD,
-    ALGO_MYRIADCOIN_GROESTL,
-    ALGO_TWECOIN,
-    ALGO_MARUCOIN,
-    ALGO_MARUCOINMOD,
-    ALGO_FUGUECOIN, // kernels starting from this will have difficulty calculated by using fuguecoin algorithm
-    ALGO_DIAMONDCOIN,
-    ALGO_GROESTLCOIN,
-};
+struct __clState;
+struct _dev_blk_ctx;
+struct work;
 
 /* Describes the Scrypt parameters and hashing functions used to mine
  * a specific coin.
@@ -34,12 +24,21 @@ typedef struct _algorithm_t {
     char*    kernelname; /* Default kernel */
     uint32_t n;        /* N (CPU/Memory tradeoff parameter) */
     uint8_t  nfactor;  /* Factor of N above (n = 2^nfactor) */
-    enum algorithm algo;
     double   diff_multiplier1;
     double   diff_multiplier2;
+    double   share_diff_multiplier;
+    uint32_t xintensity_shift;
+    uint32_t intensity_shift;
+    uint32_t found_idx;
     unsigned long long   diff_nonce;
     unsigned long long   diff_numerator;
-    void     (*regenhash)(struct work *work);
+    uint32_t diff1targ;
+    size_t n_extra_kernels;
+    long rw_buffer_size;
+    cl_command_queue_properties cq_properties;
+    void     (*regenhash)(struct work *);
+    cl_int   (*queue_kernel)(struct __clState *, struct _dev_blk_ctx *, cl_uint);
+    void     (*gen_hash)(const unsigned char *, unsigned int, unsigned char *);
 } algorithm_t;
 
 /* Set default parameters based on name. */

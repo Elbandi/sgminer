@@ -27,6 +27,7 @@
 
 #include "compat.h"
 #include "miner.h"
+#include "pool.h"
 #include "util.h"
 #include "pool.h"
 
@@ -223,8 +224,6 @@ static const char ISJSON = '{';
 #define JSON_ASCS	JSON1 _ASCS JSON2
 #define JSON_NOTIFY	JSON1 _NOTIFY JSON2
 #define JSON_DEVDETAILS	JSON1 _DEVDETAILS JSON2
-#define JSON_BYE	JSON1 _BYE JSON1
-#define JSON_RESTART	JSON1 _RESTART JSON1
 #define JSON_CLOSE	JSON3
 #define JSON_MINESTATS	JSON1 _MINESTATS JSON2
 #define JSON_CHECK	JSON1 _CHECK JSON2
@@ -349,6 +348,8 @@ static const char *JSON_PARAMETER = "parameter";
 #define MSG_ASCSETOK 119
 #define MSG_ASCSETERR 120
 #endif
+
+#define MSG_BYE 0x101
 
 #define MSG_INVNEG 121
 #define MSG_SETQUOTA 122
@@ -508,6 +509,7 @@ struct CODES {
 #endif
  { SEVERITY_SUCC,  MSG_LOCKOK,	PARAM_NONE,	"Lock stats created" },
  { SEVERITY_WARN,  MSG_LOCKDIS,	PARAM_NONE,	"Lock stats not enabled" },
+ { SEVERITY_SUCC,  MSG_BYE,		PARAM_STR,	"%s" },
  { SEVERITY_FAIL, 0, (enum code_parameters)0, NULL }
 };
 
@@ -628,12 +630,6 @@ static bool io_add(struct io_data *io_data, char *buf)
 	io_data->cur += len;
 
 	return true;
-}
-
-static bool io_put(struct io_data *io_data, char *buf)
-{
-	io_reinit(io_data);
-	return io_add(io_data, buf);
 }
 
 static void io_close(struct io_data *io_data)
@@ -1692,7 +1688,8 @@ static void apiversion(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
 	message(io_data, MSG_VERSION, 0, NULL, isjson);
 	io_open = io_add(io_data, isjson ? COMSTR JSON_VERSION : _VERSION COMSTR);
 
-	root = api_add_string(root, "SGMiner", VERSION, false);
+	root = api_add_string(root, "Miner", PACKAGE " " VERSION, false);
+	root = api_add_string(root, "CGMiner", VERSION, false);
 	root = api_add_const(root, "API", APIVERSION, false);
 
 	root = print_data(root, buf, isjson, false);
@@ -1839,6 +1836,8 @@ static void gpustatus(struct io_data *io_data, int gpu, bool isjson, bool precom
 		root = api_add_int(root, "Hardware Errors", &(cgpu->hw_errors), false);
 		root = api_add_utility(root, "Utility", &(cgpu->utility), false);
 		root = api_add_string(root, "Intensity", intensity, false);
+		root = api_add_int(root, "XIntensity", &(cgpu->xintensity), false);
+		root = api_add_int(root, "RawIntensity", &(cgpu->rawintensity), false);
 		int last_share_pool = cgpu->last_share_pool_time > 0 ?
 					cgpu->last_share_pool : -1;
 		root = api_add_int(root, "Last Share Pool", &last_share_pool, false);
@@ -2200,7 +2199,7 @@ static void gpuenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
 	int id;
 	int i;
 
-	if (gpu_threads == 0) {
+	if (mining_threads == 0) {
 		message(io_data, MSG_GPUNON, 0, NULL, isjson);
 		return;
 	}
@@ -2224,7 +2223,7 @@ static void gpuenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
 		return;
 	}
 
-	for (i = 0; i < gpu_threads; i++) {
+	for (i = 0; i < mining_threads; i++) {
 		thr = get_thread(i);
 		gpu = thr->cgpu->device_id;
 		if (gpu == id) {
@@ -2828,10 +2827,7 @@ static void gpuvddc(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __mayb
 
 void doquit(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __maybe_unused char *param, bool isjson, __maybe_unused char group)
 {
-	if (isjson)
-		io_put(io_data, JSON_START JSON_BYE);
-	else
-		io_put(io_data, _BYE);
+	message(io_data, MSG_BYE, 0, _BYE, isjson);
 
 	bye = true;
 	do_a_quit = true;
@@ -2839,10 +2835,7 @@ void doquit(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __maybe_unused
 
 void dorestart(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __maybe_unused char *param, bool isjson, __maybe_unused char group)
 {
-	if (isjson)
-		io_put(io_data, JSON_START JSON_RESTART);
-	else
-		io_put(io_data, _RESTART);
+	message(io_data, MSG_BYE, 0, _RESTART, isjson);
 
 	bye = true;
 	do_a_restart = true;
@@ -2968,7 +2961,7 @@ static void devdetails(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
 		root = api_add_string(root, "Name", cgpu->drv->name, false);
 		root = api_add_int(root, "ID", &(cgpu->device_id), false);
 		root = api_add_string(root, "Driver", cgpu->drv->dname, false);
-		root = api_add_const(root, "Kernel", cgpu->kernelname ? cgpu->kernelname : BLANK, false);
+		root = api_add_const(root, "Kernel", cgpu->kernelname ? cgpu->kernelname : cgpu->algorithm.kernelname, false);
 		root = api_add_const(root, "Model", cgpu->name ? cgpu->name : BLANK, false);
 		root = api_add_const(root, "Device Path", cgpu->device_path ? cgpu->device_path : BLANK, false);
 

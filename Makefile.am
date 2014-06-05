@@ -63,6 +63,7 @@ sgminer_SOURCES += groestlcoin.c groestlcoin.h
 sgminer_SOURCES += sifcoin.c sifcoin.h
 sgminer_SOURCES += twecoin.c twecoin.h
 sgminer_SOURCES += marucoin.c marucoin.h
+sgminer_SOURCES += maxcoin.c maxcoin.h
 sgminer_SOURCES += kernel/*.cl
 
 if WANT_USBUTILS

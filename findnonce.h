@@ -4,10 +4,8 @@
 #include "miner.h"
 
 #define MAXTHREADS (0xFFFFFFFEULL)
-
 #define MAXBUFFERS (0x100)
 #define BUFFERSIZE (sizeof(uint32_t) * MAXBUFFERS)
-#define FOUND (0xFF)
 
 #define THASHBUFSIZE (8 * 16 * 4194304)
 

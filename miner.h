@@ -601,24 +601,6 @@ struct string_elist {
 	struct list_head list;
 };
 
-static inline void string_elist_add(const char *s, struct list_head *head)
-{
-	struct string_elist *n;
-
-	n = (struct string_elist *)calloc(1, sizeof(*n));
-	n->string = strdup(s);
-	n->free_me = true;
-	list_add_tail(&n->list, head);
-}
-
-static inline void string_elist_del(struct string_elist *item)
-{
-	if (item->free_me)
-		free(item->string);
-	list_del(&item->list);
-}
-
-
 static inline uint32_t swab32(uint32_t v)
 {
 	return bswap_32(v);
@@ -1080,7 +1062,7 @@ extern pthread_cond_t restart_cond;
 
 extern void clear_stratum_shares(struct pool *pool);
 extern void clear_pool_work(struct pool *pool);
-extern void set_target(algorithm_t algorithm, unsigned char *dest_target, double diff);
+extern void set_target(unsigned char *dest_target, double diff, double diff_multiplier2);
 extern int restart_wait(struct thr_info *thr, unsigned int mstime);
 
 extern void kill_work(void);
@@ -1132,7 +1114,6 @@ extern bool opt_quiet;
 extern struct thr_info *control_thr;
 extern struct thr_info **mining_thr;
 extern struct cgpu_info gpus[MAX_GPUDEVICES];
-extern int gpu_threads;
 extern double total_secs;
 extern int mining_threads;
 extern int total_devices;
@@ -1162,7 +1143,7 @@ extern double best_diff;
 extern struct timeval block_timeval;
 extern char *workpadding;
 
-typedef struct {
+typedef struct _dev_blk_ctx {
 	cl_uint ctx_a; cl_uint ctx_b; cl_uint ctx_c; cl_uint ctx_d;
 	cl_uint ctx_e; cl_uint ctx_f; cl_uint ctx_g; cl_uint ctx_h;
 	cl_uint cty_a; cl_uint cty_b; cl_uint cty_c; cl_uint cty_d;
@@ -1273,6 +1254,14 @@ struct pool {
 	char *rpc_proxy;
 
 	algorithm_t algorithm;
+	const char *intensity;
+	const char *xintensity;
+	const char *rawintensity;
+	const char *thread_concurrency;
+	const char *gpu_engine;
+	const char *gpu_memclock;
+	const char *gpu_threads;
+	const char *gpu_fan;
 
 	pthread_mutex_t pool_lock;
 	cglock_t data_lock;

@@ -172,10 +172,12 @@ char *set_lookup_gap(char *arg)
 	return NULL;
 }
 
-char *set_thread_concurrency(char *arg)
+char *set_thread_concurrency(const char *_arg)
 {
 	int i, val = 0, device = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -261,10 +263,12 @@ char *set_gpu_map(char *arg)
 	return NULL;
 }
 
-char *set_gpu_threads(char *arg)
+char *set_gpu_threads(const char *_arg)
 {
 	int i, val = 1, device = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -290,10 +294,12 @@ char *set_gpu_threads(char *arg)
 	return NULL;
 }
 
-char *set_gpu_engine(char *arg)
+char *set_gpu_engine(const char *_arg)
 {
 	int i, val1 = 0, val2 = 0, device = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -325,10 +331,12 @@ char *set_gpu_engine(char *arg)
 	return NULL;
 }
 
-char *set_gpu_fan(char *arg)
+char *set_gpu_fan(const char *_arg)
 {
 	int i, val1 = 0, val2 = 0, device = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -361,10 +369,12 @@ char *set_gpu_fan(char *arg)
 	return NULL;
 }
 
-char *set_gpu_memclock(char *arg)
+char *set_gpu_memclock(const char *_arg)
 {
 	int i, val = 0, device = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -545,10 +555,12 @@ char *set_temp_target(char *arg)
 }
 #endif
 
-char *set_intensity(char *arg)
+char *set_intensity(const char *_arg)
 {
 	int i, device = 0, *tt;
 	char *nextptr, val = 0;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -598,10 +610,12 @@ char *set_intensity(char *arg)
 	return NULL;
 }
 
-char *set_xintensity(char *arg)
+char *set_xintensity(const char *_arg)
 {
 	int i, device = 0, val = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -639,10 +653,12 @@ char *set_xintensity(char *arg)
 	return NULL;
 }
 
-char *set_rawintensity(char *arg)
+char *set_rawintensity(const char *_arg)
 {
 	int i, device = 0, val = 0;
 	char *nextptr;
+	char *arg = (char *)alloca(strlen(_arg) + 1);
+	strcpy(arg, _arg);
 
 	nextptr = strtok(arg, ",");
 	if (nextptr == NULL)
@@ -857,7 +873,7 @@ retry: // TODO: refactor
 			cgsem_post(&thr->sem);
 		}
 		goto retry;
-	} if (!strncasecmp(&input, "d", 1)) {
+	} else if (!strncasecmp(&input, "d", 1)) {
 		if (selected)
 			selected = curses_int("Select GPU to disable");
 		if (selected < 0 || selected >= nDevs) {
@@ -999,174 +1015,21 @@ void manage_gpu(void)
 
 static _clState *clStates[MAX_GPUDEVICES];
 
-#define CL_SET_BLKARG(blkvar) status |= clSetKernelArg(*kernel, num++, sizeof(uint), (void *)&blk->blkvar)
-#define CL_SET_ARG(var) status |= clSetKernelArg(*kernel, num++, sizeof(var), (void *)&var)
-#define CL_SET_VARG(args, var) status |= clSetKernelArg(*kernel, num++, args * sizeof(uint), (void *)var)
-#define CL_SET_ARG_N(n,var) status |= clSetKernelArg(*kernel, n, sizeof(var), (void *)&var)
-
-static cl_int queue_scrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, algorithm_t *algorithm)
-{
-	unsigned char *midstate = blk->work->midstate;
-	cl_kernel *kernel = &clState->kernel;
-	unsigned int num = 0;
-	cl_uint le_target;
-	cl_int status = 0;
-
-	uint32_t data[20];
-	cl_uint nfactor;
-
-	le_target = *(cl_uint *)(blk->work->device_target + 28);
-
-	if (algorithm->algo == ALGO_SCRYPT_JANE) {
-		unsigned int timestamp = bswap_32(*((unsigned int *)(blk->work->data + 17*4)));
-		nfactor = sj_GetNfactor(timestamp);
-		nfactor = (1 << (nfactor + 1));
-		sj_be32enc_vect(data, (const uint32_t *)blk->work->data, 19);
-		clState->cldata = data;
-	} else {
-		clState->cldata = blk->work->data;
-	}
-
-	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
-
-	CL_SET_ARG(clState->CLbuffer0);
-	CL_SET_ARG(clState->outputBuffer);
-	CL_SET_ARG(clState->padbuffer8);
-	CL_SET_VARG(4, &midstate[0]);
-	CL_SET_VARG(4, &midstate[16]);
-	CL_SET_ARG(le_target);
-	if (algorithm->algo == ALGO_SCRYPT_JANE)
-		CL_SET_ARG(nfactor);
-
-	return status;
-}
-
-static cl_int queue_sph_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, __maybe_unused algorithm_t *algorithm)
-{
-	unsigned char *midstate = blk->work->midstate;
-	cl_kernel *kernel = &clState->kernel;
-	unsigned int num = 0;
-	cl_ulong le_target;
-	cl_int status = 0;
-	uint32_t data[20];
-
-	le_target = *(cl_ulong *)(blk->work->device_target + 24);
-	flip80(data, blk->work->data);
-	clState->cldata = data;
-	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
-
-	CL_SET_ARG(clState->CLbuffer0);
-	CL_SET_ARG(clState->outputBuffer);
-	CL_SET_ARG(le_target);
-
-	return status;
-}
-
-static cl_int queue_x11mod_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads, __maybe_unused algorithm_t *algorithm)
-{
-	unsigned char *midstate = blk->work->midstate;
-	cl_kernel *kernel;
-	cl_ulong le_target;
-	cl_int status = 0;
-	uint32_t data[20];
-
-	le_target = *(cl_ulong *)(blk->work->device_target + 24);
-	flip80(data, blk->work->data);
-	clState->cldata = data;
-	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
-
-//clbuffer, hashes
-	kernel = &clState->kernel_blake;
-	CL_SET_ARG_N(0,clState->CLbuffer0);
-	CL_SET_ARG_N(1,clState->hash_buffer);
-	kernel = &clState->kernel_bmw;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_groestl;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_skein;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_jh;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_keccak;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_luffa;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_cubehash;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_shavite;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_simd;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-//hashes, output, target
-	kernel = &clState->kernel_echo;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	CL_SET_ARG_N(1,clState->outputBuffer);
-	CL_SET_ARG_N(2,le_target);
-
-	return status;
-}
-
-static cl_int queue_x13mod_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
-{
-	unsigned char *midstate = blk->work->midstate;
-	cl_kernel *kernel;
-	unsigned int num = 0;
-	cl_ulong le_target;
-	cl_int status = 0;
-	uint32_t data[20];
-
-	le_target = *(cl_ulong *)(blk->work->device_target + 24);
-	flip80(data, blk->work->data);
-	clState->cldata = data;
-	status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
-
-//clbuffer, hashes
-	kernel = &clState->kernel_blake;
-	CL_SET_ARG_N(0,clState->CLbuffer0);
-	CL_SET_ARG_N(1,clState->hash_buffer);
-	kernel = &clState->kernel_bmw;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_groestl;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_skein;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_jh;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_keccak;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_luffa;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_cubehash;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_shavite;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_simd;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_echo;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	kernel = &clState->kernel_hamsi;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-//hashes, output, target
-	kernel = &clState->kernel_fugue;
-	CL_SET_ARG_N(0,clState->hash_buffer);
-	CL_SET_ARG_N(1,clState->outputBuffer);
-	CL_SET_ARG_N(2,le_target);
-
-	return status;
-}
-
-
 static void set_threads_hashes(unsigned int vectors, unsigned int compute_shaders, int64_t *hashes, size_t *globalThreads,
-			       unsigned int minthreads, __maybe_unused int *intensity, __maybe_unused int *xintensity, __maybe_unused int *rawintensity)
+			       unsigned int minthreads, __maybe_unused int *intensity, __maybe_unused int *xintensity,
+             __maybe_unused int *rawintensity, algorithm_t *algorithm)
 {
 	unsigned int threads = 0;
 	while (threads < minthreads) {
 		if (*rawintensity > 0) {
 			threads = *rawintensity;
 		} else if (*xintensity > 0) {
-			threads = compute_shaders * *xintensity;
+      if (algorithm->xintensity_shift)
+        threads = compute_shaders * (1 << (algorithm->xintensity_shift + *xintensity));
+      else
+        threads = compute_shaders * *xintensity;
 		} else {
-			threads = 1 << *intensity;
+			threads = 1 << (algorithm->intensity_shift + *intensity);
 		}
 		if (threads < minthreads) {
 			if (likely(*intensity < MAX_INTENSITY))
@@ -1375,7 +1238,7 @@ static void get_opencl_statline(char *buf, size_t bufsiz, struct cgpu_info *gpu)
 }
 
 struct opencl_thread_data {
-	cl_int (*queue_kernel_parameters)(_clState *, dev_blk_ctx *, cl_uint, algorithm_t *);
+	cl_int (*queue_kernel_parameters)(_clState *, dev_blk_ctx *, cl_uint);
 	uint32_t *res;
 };
 
@@ -1386,6 +1249,7 @@ static bool opencl_thread_prepare(struct thr_info *thr)
 	char name[256];
 	struct timeval now;
 	struct cgpu_info *cgpu = thr->cgpu;
+	struct opencl_thread_data *thrdata = (struct opencl_thread_data *)thr->cgpu_data;
 	int gpu = cgpu->device_id;
 	int virtual_gpu = cgpu->virtual_gpu;
 	int i = thr->id;
@@ -1401,6 +1265,9 @@ static bool opencl_thread_prepare(struct thr_info *thr)
 
 	strcpy(name, "");
 	applog(LOG_INFO, "Init GPU thread %i GPU %i virtual GPU %i", i, gpu, virtual_gpu);
+	if (thrdata)
+		thrdata->queue_kernel_parameters = cgpu->algorithm.queue_kernel;
+
 	clStates[i] = initCl(virtual_gpu, name, sizeof(name), &cgpu->algorithm);
 	if (!clStates[i]) {
 #ifdef HAVE_CURSES
@@ -1456,15 +1323,7 @@ static bool opencl_thread_init(struct thr_info *thr)
 		return false;
 	}
 
-	if (ALGO_DARKCOINMOD == gpu->algorithm.algo)
-		thrdata->queue_kernel_parameters = &queue_x11mod_kernel;
-	else if (ALGO_MARUCOINMOD == gpu->algorithm.algo)
-		thrdata->queue_kernel_parameters = &queue_x13mod_kernel;
-	else if (ALGO_QUARKCOIN <= gpu->algorithm.algo && gpu->algorithm.algo <= ALGO_GROESTLCOIN)
-		thrdata->queue_kernel_parameters = &queue_sph_kernel;
-	else
-		thrdata->queue_kernel_parameters = &queue_scrypt_kernel;
-
+	thrdata->queue_kernel_parameters = gpu->algorithm.queue_kernel;
 	thrdata->res = (uint32_t *)calloc(buffersize, 1);
 
 	if (!thrdata->res) {
@@ -1476,6 +1335,8 @@ static bool opencl_thread_init(struct thr_info *thr)
 	status |= clEnqueueWriteBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0,
 				       buffersize, blank_res, 0, NULL, NULL);
 	if (unlikely(status != CL_SUCCESS)) {
+		free(thrdata->res);
+		free(thrdata);
 		applog(LOG_ERR, "Error: clEnqueueWriteBuffer failed.");
 		return false;
 	}
@@ -1486,7 +1347,6 @@ static bool opencl_thread_init(struct thr_info *thr)
 
 	return true;
 }
-
 
 static bool opencl_prepare_work(struct thr_info __maybe_unused *thr, struct work *work)
 {
@@ -1511,15 +1371,16 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 	struct opencl_thread_data *thrdata = (struct opencl_thread_data *)thr->cgpu_data;
 	struct cgpu_info *gpu = thr->cgpu;
 	_clState *clState = clStates[thr_id];
-	const cl_kernel *kernel = &clState->kernel;
 	const int dynamic_us = opt_dynamic_interval * 1000;
 
 	cl_int status;
 	size_t globalThreads[1];
 	size_t localThreads[1] = { clState->wsize };
+    size_t *p_global_work_offset = NULL;
 	int64_t hashes;
-	int found = FOUND;
+	int found = gpu->algorithm.found_idx;
 	int buffersize = BUFFERSIZE;
+    unsigned int i;
 
 	/* Windows' timer resolution is only 15ms so oversample 5x */
 	if (gpu->dynamic && (++gpu->intervals * dynamic_us) > 70000) {
@@ -1540,110 +1401,40 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 	}
 
 	set_threads_hashes(clState->vwidth, clState->compute_shaders, &hashes, globalThreads, localThreads[0],
-			   &gpu->intensity, &gpu->xintensity, &gpu->rawintensity);
+			   &gpu->intensity, &gpu->xintensity, &gpu->rawintensity, &gpu->algorithm);
 	if (hashes > gpu->max_hashes)
 		gpu->max_hashes = hashes;
 
-	status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0], &gpu->algorithm);
+	status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0]);
 	if (unlikely(status != CL_SUCCESS)) {
 		applog(LOG_ERR, "Error: clSetKernelArg of all params failed.");
 		return -1;
 	}
 
-	if (gpu->algorithm.algo == ALGO_DARKCOINMOD) {
-		if (clState->goffset) {
-			size_t global_work_offset[1];
-			global_work_offset[0] = work->blk.nonce;
+    if (clState->goffset)
+        p_global_work_offset = (size_t *)&work->blk.nonce;
 
-			CL_ENQUEUE_KERNEL(blake, global_work_offset);
-			CL_ENQUEUE_KERNEL(bmw, global_work_offset);
-			CL_ENQUEUE_KERNEL(groestl, global_work_offset);
-			CL_ENQUEUE_KERNEL(skein, global_work_offset);
-			CL_ENQUEUE_KERNEL(jh, global_work_offset);
-			CL_ENQUEUE_KERNEL(keccak, global_work_offset);
-			CL_ENQUEUE_KERNEL(luffa, global_work_offset);
-			CL_ENQUEUE_KERNEL(cubehash, global_work_offset);
-			CL_ENQUEUE_KERNEL(shavite, global_work_offset);
-			CL_ENQUEUE_KERNEL(simd, global_work_offset)
-			CL_ENQUEUE_KERNEL(echo, global_work_offset);
-		} else {
-			CL_ENQUEUE_KERNEL(blake, NULL);
-			CL_ENQUEUE_KERNEL(bmw, NULL);
-			CL_ENQUEUE_KERNEL(groestl, NULL);
-			CL_ENQUEUE_KERNEL(skein, NULL);
-			CL_ENQUEUE_KERNEL(jh, NULL);
-			CL_ENQUEUE_KERNEL(keccak, NULL);
-			CL_ENQUEUE_KERNEL(luffa, NULL);
-			CL_ENQUEUE_KERNEL(cubehash, NULL);
-			CL_ENQUEUE_KERNEL(shavite, NULL);
-			CL_ENQUEUE_KERNEL(simd, NULL)
-			CL_ENQUEUE_KERNEL(echo, NULL);
-		}
-	} else if (gpu->algorithm.algo == ALGO_MARUCOINMOD) {
-		if (clState->goffset) {
-			size_t global_work_offset[1];
-			global_work_offset[0] = work->blk.nonce;
-
-			CL_ENQUEUE_KERNEL(blake, global_work_offset);
-			CL_ENQUEUE_KERNEL(bmw, global_work_offset);
-			CL_ENQUEUE_KERNEL(groestl, global_work_offset);
-			CL_ENQUEUE_KERNEL(skein, global_work_offset);
-			CL_ENQUEUE_KERNEL(jh, global_work_offset);
-			CL_ENQUEUE_KERNEL(keccak, global_work_offset);
-			CL_ENQUEUE_KERNEL(luffa, global_work_offset);
-			CL_ENQUEUE_KERNEL(cubehash, global_work_offset);
-			CL_ENQUEUE_KERNEL(shavite, global_work_offset);
-			CL_ENQUEUE_KERNEL(simd, global_work_offset)
-			CL_ENQUEUE_KERNEL(echo, global_work_offset);
-			CL_ENQUEUE_KERNEL(hamsi, global_work_offset);
-			CL_ENQUEUE_KERNEL(fugue, global_work_offset);
-		} else {
-			CL_ENQUEUE_KERNEL(blake, NULL);
-			CL_ENQUEUE_KERNEL(bmw, NULL);
-			CL_ENQUEUE_KERNEL(groestl, NULL);
-			CL_ENQUEUE_KERNEL(skein, NULL);
-			CL_ENQUEUE_KERNEL(jh, NULL);
-			CL_ENQUEUE_KERNEL(keccak, NULL);
-			CL_ENQUEUE_KERNEL(luffa, NULL);
-			CL_ENQUEUE_KERNEL(cubehash, NULL);
-			CL_ENQUEUE_KERNEL(shavite, NULL);
-			CL_ENQUEUE_KERNEL(simd, NULL)
-			CL_ENQUEUE_KERNEL(echo, NULL);
-			CL_ENQUEUE_KERNEL(hamsi, NULL);
-			CL_ENQUEUE_KERNEL(fugue, NULL);
-		}
-	} else {
-		if (clState->goffset) {
-			size_t global_work_offset[1];
-
-			global_work_offset[0] = work->blk.nonce;
-			if (gpu->algorithm.algo == ALGO_SCRYPT_JANE)
-				applog(LOG_DEBUG, "Nonce: %x, Global work size: %x, local work size: %x", work->blk.nonce, (unsigned)globalThreads[0], (unsigned)localThreads[0]);
-
-			status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, global_work_offset,
-							globalThreads, localThreads, 0,  NULL, NULL);
-		} else
-			status = clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL,
-							globalThreads, localThreads, 0,  NULL, NULL);
-		if (unlikely(status != CL_SUCCESS)) {
-			applog(LOG_ERR, "Error %d: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)", status);
-			return -1;
-		}
+    status = clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel, 1, p_global_work_offset,
+                    globalThreads, localThreads, 0,  NULL, NULL);
+	if (unlikely(status != CL_SUCCESS)) {
+		applog(LOG_ERR, "Error %d: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)", status);
+		return -1;
 	}
+
+  for (i = 0; i < clState->n_extra_kernels; i++) {
+      status = clEnqueueNDRangeKernel(clState->commandQueue, clState->extra_kernels[i], 1, p_global_work_offset,
+                      globalThreads, localThreads, 0,  NULL, NULL);
+      if (unlikely(status != CL_SUCCESS)) {
+          applog(LOG_ERR, "Error %d: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)", status);
+          return -1;
+      }
+  }
 
 	status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0,
 				     buffersize, thrdata->res, 0, NULL, NULL);
 	if (unlikely(status != CL_SUCCESS)) {
 		applog(LOG_ERR, "Error: clEnqueueReadBuffer failed error %d. (clEnqueueReadBuffer)", status);
 		return -1;
-	}
-
-	if (gpu->algorithm.algo == ALGO_SCRYPT_JANE) {
-		uint32_t *o;
-		uint32_t target;
-		o = thrdata->res;
-		target = *(uint32_t *)(work->target + 28);
-		applog(LOG_DEBUG, "Nonce: %x, Output buffer: %x %x %x %x %x %x %x %x Target: %x", work->blk.nonce, o[0], o[1], o[2], o[3], o[4], o[5], o[6], o[7], target);
 	}
 
 	/* The amount of work scanned can fluctuate when intensity changes
@@ -1654,7 +1445,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 	/* This finish flushes the readbuffer set with CL_FALSE in clEnqueueReadBuffer */
 	clFinish(clState->commandQueue);
 
-	/* FOUND entry is used as a counter to say how many nonces exist */
+	/* found entry is used as a counter to say how many nonces exist */
 	if (thrdata->res[found]) {
 		/* Clear the buffer again */
 		status = clEnqueueWriteBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0,
@@ -1683,29 +1474,22 @@ static void opencl_thread_shutdown(struct thr_info *thr)
 	const int thr_id = thr->id;
 	_clState *clState = clStates[thr_id];
 	clStates[thr_id] = NULL;
+    unsigned int i;
 
 	if (clState) {
 		clFinish(clState->commandQueue);
 		clReleaseMemObject(clState->outputBuffer);
 		clReleaseMemObject(clState->CLbuffer0);
+		if (clState->padbuffer8)
 		clReleaseMemObject(clState->padbuffer8);
-		CL_RELEASE_KERNEL(kernel_blake);
-		CL_RELEASE_KERNEL(kernel_bmw);
-		CL_RELEASE_KERNEL(kernel_groestl);
-		CL_RELEASE_KERNEL(kernel_skein);
-		CL_RELEASE_KERNEL(kernel_jh);
-		CL_RELEASE_KERNEL(kernel_keccak);
-		CL_RELEASE_KERNEL(kernel_luffa);
-		CL_RELEASE_KERNEL(kernel_cubehash);
-		CL_RELEASE_KERNEL(kernel_shavite);
-		CL_RELEASE_KERNEL(kernel_simd);
-		CL_RELEASE_KERNEL(kernel_echo);
-		CL_RELEASE_KERNEL(kernel_hamsi);
-		CL_RELEASE_KERNEL(kernel_fugue);
-		CL_RELEASE_KERNEL(kernel);
+		clReleaseKernel(clState->kernel);
+        for (i = 0; i < clState->n_extra_kernels; i++)
+            clReleaseKernel(clState->extra_kernels[i]);
 		clReleaseProgram(clState->program);
 		clReleaseCommandQueue(clState->commandQueue);
 		clReleaseContext(clState->context);
+		if (clState->extra_kernels)
+			free(clState->extra_kernels);
 		free(clState);
 	}
 }

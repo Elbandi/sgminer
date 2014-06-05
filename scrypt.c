@@ -415,8 +415,8 @@ void scrypt_regenhash(struct work *work)
 	be32enc_vect(data, (const uint32_t *)work->data, 19);
 	data[19] = htobe32(*nonce);
 
-	scratchbuf = (char *)alloca(n * 128 + 512);
-	scrypt_n_1_1_256_sp(data, scratchbuf, ohash, n);
+	scratchbuf = (char *)alloca(work->pool->algorithm.n * 128 + 512);
+	scrypt_n_1_1_256_sp(data, scratchbuf, ohash, work->pool->algorithm.n);
 	flip32(ohash, ohash);
 }
 

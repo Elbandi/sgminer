@@ -108,6 +108,7 @@ algorithm_t default_algorithm;
 static const bool opt_time = true;
 unsigned long long global_hashrate;
 unsigned long global_quota_gcd = 1;
+bool opt_show_coindiff = false;
 time_t last_getwork;
 
 /* scrypt-jane, defaults suitable for YAC */
@@ -118,7 +119,6 @@ unsigned int sj_startTime = 1388361600;
 int nDevs;
 int opt_dynamic_interval = 7;
 int opt_g_threads = -1;
-int gpu_threads;
 bool opt_restart = true;
 bool opt_nogpu;
 bool opt_noasic;
@@ -185,7 +185,7 @@ static pthread_t usb_poll_thread;
 static bool usb_polling;
 #endif
 
-double opt_diff_mult = 0;
+double opt_diff_mult = 0.0;
 
 char *opt_kernel_path;
 char *sgminer_path;
@@ -193,7 +193,7 @@ char *sgminer_path;
 #define QUIET (opt_quiet || opt_realquiet)
 
 struct thr_info *control_thr;
-struct thr_info **mining_thr;
+struct thr_info **mining_thr = NULL;
 static int gwsched_thr_id;
 static int watchpool_thr_id;
 static int watchdog_thr_id;
@@ -310,7 +310,6 @@ struct block {
 };
 
 static struct block *blocks = NULL;
-
 
 int swork_id;
 
@@ -843,6 +842,62 @@ static char *set_pool_algorithm(const char *arg)
   return NULL;
 }
 
+static char *set_pool_intensity(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->intensity = arg;
+  return NULL;
+}
+
+static char *set_pool_xintensity(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->xintensity = arg;
+  return NULL;
+}
+
+static char *set_pool_rawintensity(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->rawintensity = arg;
+  return NULL;
+}
+
+static char *set_pool_thread_concurrency(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->thread_concurrency = arg;
+  return NULL;
+}
+
+static char *set_pool_gpu_engine(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->gpu_engine = arg;
+  return NULL;
+}
+
+static char *set_pool_gpu_memclock(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->gpu_memclock = arg;
+  return NULL;
+}
+
+static char *set_pool_gpu_threads(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->gpu_threads = arg;
+  return NULL;
+}
+
+static char *set_pool_gpu_fan(const char *arg)
+{
+  struct pool *pool = get_current_pool();
+  pool->gpu_fan = arg;
+  return NULL;
+}
+
 static char *set_pool_nfactor(const char *arg)
 {
   struct pool *pool = get_current_pool();
@@ -1125,17 +1180,25 @@ static void load_temp_cutoffs()
 
 static char *set_algo(const char *arg)
 {
-  set_algorithm(&default_algorithm, arg);
-  applog(LOG_INFO, "Set default algorithm to %s", default_algorithm.name);
+  if ((json_array_index < 0) || (total_pools == 0)) {
+    set_algorithm(&default_algorithm, arg);
+    applog(LOG_INFO, "Set default algorithm to %s", default_algorithm.name);
+  } else {
+    set_pool_algorithm(arg);
+  }
 
   return NULL;
 }
 
 static char *set_nfactor(const char *arg)
 {
-  set_algorithm_nfactor(&default_algorithm, (const uint8_t) atoi(arg));
-  applog(LOG_INFO, "Set algorithm N-factor to %d (N to %d)",
-         default_algorithm.nfactor, default_algorithm.n);
+  if ((json_array_index < 0) || (total_pools == 0)) {
+    set_algorithm_nfactor(&default_algorithm, (const uint8_t) atoi(arg));
+    applog(LOG_INFO, "Set algorithm N-factor to %d (N to %d)",
+           default_algorithm.nfactor, default_algorithm.n);
+  } else {
+    set_pool_nfactor(arg);
+  }
 
   return NULL;
 }
@@ -1198,11 +1261,10 @@ static char *set_null(const char __maybe_unused *arg)
 
 char *set_difficulty_multiplier(char *arg)
 {
-  char **endptr = NULL;
   if (!(arg && arg[0]))
     return "Invalid parameters for set difficulty multiplier";
-  opt_diff_mult = strtod(arg, endptr);
-  if (opt_diff_mult == 0 || endptr == arg)
+  opt_diff_mult = strtod(arg, NULL);
+  if (opt_diff_mult == 0.0)
     return "Invalid value passed to set difficulty multiplier";
 
   return NULL;
@@ -1229,23 +1291,23 @@ static struct opt_table opt_config_table[] = {
       opt_set_bool, &opt_api_mcast,
       "Enable API Multicast listener, default: disabled"),
   OPT_WITH_ARG("--api-mcast-addr",
-         set_api_mcast_addr, NULL, NULL,
-         "API Multicast listen address"),
+     set_api_mcast_addr, NULL, NULL,
+     "API Multicast listen address"),
   OPT_WITH_ARG("--api-mcast-code",
-         set_api_mcast_code, NULL, NULL,
-         "Code expected in the API Multicast message, don't use '-'"),
+     set_api_mcast_code, NULL, NULL,
+     "Code expected in the API Multicast message, don't use '-'"),
   OPT_WITH_ARG("--api-mcast-des",
-         set_api_mcast_des, NULL, NULL,
-         "Description appended to the API Multicast reply, default: ''"),
+     set_api_mcast_des, NULL, NULL,
+     "Description appended to the API Multicast reply, default: ''"),
   OPT_WITH_ARG("--api-mcast-port",
-         set_int_1_to_65535, opt_show_intval, &opt_api_mcast_port,
-         "API Multicast listen port"),
+     set_int_1_to_65535, opt_show_intval, &opt_api_mcast_port,
+     "API Multicast listen port"),
   OPT_WITHOUT_ARG("--api-network",
       opt_set_bool, &opt_api_network,
       "Allow API (if enabled) to listen on/for any address, default: only 127.0.0.1"),
   OPT_WITH_ARG("--api-port",
-         set_int_1_to_65535, opt_show_intval, &opt_api_port,
-         "Port number of miner API"),
+      set_int_1_to_65535, opt_show_intval, &opt_api_port,
+      "Port number of miner API"),
 #ifdef HAVE_ADL
   OPT_WITHOUT_ARG("--auto-fan",
       opt_set_bool, &opt_autofan,
@@ -1255,8 +1317,8 @@ static struct opt_table opt_config_table[] = {
       "Automatically adjust all GPU engine clock speeds to maintain a target temperature"),
 #endif
   OPT_WITHOUT_ARG("--balance",
-         set_balance, &pool_strategy,
-         "Change multipool strategy from failover to even share balance"),
+      set_balance, &pool_strategy,
+      "Change multipool strategy from failover to even share balance"),
   OPT_WITHOUT_ARG("--benchmark",
       opt_set_bool, &opt_benchmark,
       "Run sgminer in benchmark mode - produces no shares"),
@@ -1266,14 +1328,14 @@ static struct opt_table opt_config_table[] = {
       "Use compact display without per device statistics"),
 #endif
   OPT_WITHOUT_ARG("--debug|-D",
-         enable_debug, &opt_debug,
-         "Enable debug output"),
+      enable_debug, &opt_debug,
+      "Enable debug output"),
   OPT_WITH_ARG("--description",
-         set_pool_description, NULL, NULL,
-         "Pool description"),
+      set_pool_description, NULL, NULL,
+      "Pool description"),
   OPT_WITH_ARG("--device|-d",
-         set_devices, NULL, NULL,
-               "Select device to use, one value, range and/or comma separated (e.g. 0-2,4) default: all"),
+      set_devices, NULL, NULL,
+      "Select device to use, one value, range and/or comma separated (e.g. 0-2,4) default: all"),
   OPT_WITHOUT_ARG("--disable-gpu|-G",
       opt_set_bool, &opt_nogpu,
       "Disable GPU mining even if suitable devices exist"),
@@ -1289,8 +1351,8 @@ static struct opt_table opt_config_table[] = {
       opt_set_bool, &opt_disable_pool,
       "Automatically disable pools that continually reject shares"),
   OPT_WITH_ARG("--expiry|-E",
-         set_int_0_to_9999, opt_show_intval, &opt_expiry,
-         "Upper bound on how many seconds after getting work we consider a share from it stale"),
+      set_int_0_to_9999, opt_show_intval, &opt_expiry,
+      "Upper bound on how many seconds after getting work we consider a share from it stale"),
   OPT_WITHOUT_ARG("--failover-only",
       opt_set_bool, &opt_fail_only,
       "Don't leak work to backup pools when primary pool is lagging"),
@@ -1301,97 +1363,110 @@ static struct opt_table opt_config_table[] = {
       opt_set_bool, &opt_fix_protocol,
       "Do not redirect to a different getwork protocol (eg. stratum)"),
   OPT_WITH_ARG("--gpu-dyninterval",
-         set_int_1_to_65535, opt_show_intval, &opt_dynamic_interval,
-         "Set the refresh interval in ms for GPUs using dynamic intensity"),
+      set_int_1_to_65535, opt_show_intval, &opt_dynamic_interval,
+      "Set the refresh interval in ms for GPUs using dynamic intensity"),
   OPT_WITH_ARG("--gpu-platform",
-         set_int_0_to_9999, opt_show_intval, &opt_platform_id,
-         "Select OpenCL platform ID to use for GPU mining"),
+      set_int_0_to_9999, opt_show_intval, &opt_platform_id,
+      "Select OpenCL platform ID to use for GPU mining"),
 #ifndef HAVE_ADL
   // gpu-threads can only be set per-card if ADL is available
   OPT_WITH_ARG("--gpu-threads|-g",
-         set_int_1_to_10, opt_show_intval, &opt_g_threads,
-         "Number of threads per GPU (1 - 10)"),
+      set_int_1_to_10, opt_show_intval, &opt_g_threads,
+      "Number of threads per GPU (1 - 10)"),
 #else
   OPT_WITH_ARG("--gpu-threads|-g",
-         set_gpu_threads, NULL, NULL,
-         "Number of threads per GPU - one value or comma separated list (e.g. 1,2,1)"),
+      set_gpu_threads, NULL, NULL,
+      "Number of threads per GPU - one value or comma separated list (e.g. 1,2,1)"),
   OPT_WITH_ARG("--gpu-engine",
-         set_gpu_engine, NULL, NULL,
-         "GPU engine (over)clock range in Mhz - one value, range and/or comma separated list (e.g. 850-900,900,750-850)"),
+      set_gpu_engine, NULL, NULL,
+      "GPU engine (over)clock range in Mhz - one value, range and/or comma separated list (e.g. 850-900,900,750-850)"),
   OPT_WITH_ARG("--gpu-fan",
-         set_gpu_fan, NULL, NULL,
-         "GPU fan percentage range - one value, range and/or comma separated list (e.g. 0-85,85,65)"),
+      set_gpu_fan, NULL, NULL,
+      "GPU fan percentage range - one value, range and/or comma separated list (e.g. 0-85,85,65)"),
   OPT_WITH_ARG("--gpu-map",
-         set_gpu_map, NULL, NULL,
-         "Map OpenCL to ADL device order manually, paired CSV (e.g. 1:0,2:1 maps OpenCL 1 to ADL 0, 2 to 1)"),
+      set_gpu_map, NULL, NULL,
+      "Map OpenCL to ADL device order manually, paired CSV (e.g. 1:0,2:1 maps OpenCL 1 to ADL 0, 2 to 1)"),
   OPT_WITH_ARG("--gpu-memclock",
-         set_gpu_memclock, NULL, NULL,
-         "Set the GPU memory (over)clock in Mhz - one value for all or separate by commas for per card"),
+      set_gpu_memclock, NULL, NULL,
+      "Set the GPU memory (over)clock in Mhz - one value for all or separate by commas for per card"),
   OPT_WITH_ARG("--gpu-memdiff",
-         set_gpu_memdiff, NULL, NULL,
-         "Set a fixed difference in clock speed between the GPU and memory in auto-gpu mode"),
+      set_gpu_memdiff, NULL, NULL,
+      "Set a fixed difference in clock speed between the GPU and memory in auto-gpu mode"),
   OPT_WITH_ARG("--gpu-powertune",
-         set_gpu_powertune, NULL, NULL,
-         "Set the GPU powertune percentage - one value for all or separate by commas for per card"),
+      set_gpu_powertune, NULL, NULL,
+      "Set the GPU powertune percentage - one value for all or separate by commas for per card"),
   OPT_WITHOUT_ARG("--gpu-reorder",
       opt_set_bool, &opt_reorder,
       "Attempt to reorder GPU devices according to PCI Bus ID"),
   OPT_WITH_ARG("--gpu-vddc",
-         set_gpu_vddc, NULL, NULL,
-         "Set the GPU voltage in Volts - one value for all or separate by commas for per card"),
+      set_gpu_vddc, NULL, NULL,
+      "Set the GPU voltage in Volts - one value for all or separate by commas for per card"),
+  OPT_WITH_ARG("--pool-gpu-engine",
+      set_pool_gpu_engine, NULL, NULL,
+      "GPU engine (over)clock range in Mhz - one value, range and/or comma separated list (e.g. 850-900,900,750-850)"),
+  OPT_WITH_ARG("--pool-gpu-memclock",
+      set_pool_gpu_memclock, NULL, NULL,
+      "Set the GPU memory (over)clock in Mhz - one value for all or separate by commas for per card"),
+  OPT_WITH_ARG("--pool-gpu-threads",
+      set_pool_gpu_threads, NULL, NULL,
+      "Number of threads per GPU for pool"),
+  OPT_WITH_ARG("--pool-gpu-fan",
+      set_pool_gpu_fan, NULL, NULL,
+      "GPU fan for pool"),
 #endif
   OPT_WITH_ARG("--lookup-gap",
-         set_lookup_gap, NULL, NULL,
-         "Set GPU lookup gap for scrypt mining, comma separated"),
+      set_lookup_gap, NULL, NULL,
+      "Set GPU lookup gap for scrypt mining, comma separated"),
 #ifdef HAVE_CURSES
   OPT_WITHOUT_ARG("--incognito",
       opt_set_bool, &opt_incognito,
       "Do not display user name in status window"),
 #endif
   OPT_WITH_ARG("--intensity|-I",
-         set_intensity, NULL, NULL,
-         "Intensity of GPU scanning (d or " MIN_INTENSITY_STR
-         " -> " MAX_INTENSITY_STR
-         ",default: d to maintain desktop interactivity), overridden by --xintensity or --rawintensity."),
+      set_intensity, NULL, NULL,
+      "Intensity of GPU scanning (d or " MIN_INTENSITY_STR
+      " -> " MAX_INTENSITY_STR
+      ",default: d to maintain desktop interactivity), overridden by --xintensity or --rawintensity."),
   OPT_WITH_ARG("--xintensity|-X",
-         set_xintensity, NULL, NULL,
-         "Shader based intensity of GPU scanning (" MIN_XINTENSITY_STR " to "
-       MAX_XINTENSITY_STR "), overrides --intensity|-I, overridden by --rawintensity."),
+      set_xintensity, NULL, NULL,
+      "Shader based intensity of GPU scanning (" MIN_XINTENSITY_STR " to "
+        MAX_XINTENSITY_STR "), overrides --intensity|-I, overridden by --rawintensity."),
   OPT_WITH_ARG("--rawintensity",
-         set_rawintensity, NULL, NULL,
-         "Raw intensity of GPU scanning (" MIN_RAWINTENSITY_STR " to "
-       MAX_RAWINTENSITY_STR "), overrides --intensity|-I and --xintensity|-X."),
-  OPT_WITH_ARG("--hotplug",
-         set_int_0_to_9999, NULL, &hotplug_time,
-#ifdef USE_USBUTILS
-         "Seconds between hotplug checks (0 means never check)"
-#else
-         opt_hidden
-#endif
-        ),
+      set_rawintensity, NULL, NULL,
+      "Raw intensity of GPU scanning (" MIN_RAWINTENSITY_STR " to "
+        MAX_RAWINTENSITY_STR "), overrides --intensity|-I and --xintensity|-X."),
+  OPT_WITH_ARG("--pool-intensity",
+      set_pool_intensity, NULL, NULL,
+      "Intensity of GPU scanning (pool-specific)"),
+  OPT_WITH_ARG("--pool-xintensity",
+      set_pool_xintensity, NULL, NULL,
+      "Shader based intensity of GPU scanning (pool-specific)"),
+  OPT_WITH_ARG("--pool-rawintensity",
+      set_pool_rawintensity, NULL, NULL,
+      "Raw intensity of GPU scanning (pool-specific)"),
   OPT_WITH_ARG("--kernel-path|-K",
-         opt_set_charp, opt_show_charp, &opt_kernel_path,
-               "Specify a path to where kernel files are"),
+      opt_set_charp, opt_show_charp, &opt_kernel_path,
+      "Specify a path to where kernel files are"),
   OPT_WITH_ARG("--kernel|-k",
-         set_kernel, NULL, NULL,
-         "Override kernel to use - one value or comma separated"),
+      set_kernel, NULL, NULL,
+      "Override kernel to use - one value or comma separated"),
 #ifdef USE_GRIDSEED
   OPT_WITH_ARG("--gridseed-options",
-         opt_set_charp, NULL, &opt_gridseed_options,
-         "Gridseed options"),
+      opt_set_charp, NULL, &opt_gridseed_options,
+      "Gridseed options"),
   OPT_WITH_ARG("--gridseed-freq",
-         opt_set_charp, NULL, &opt_gridseed_freq,
-         "Set gridseed chip frequency"),
+      opt_set_charp, NULL, &opt_gridseed_freq,
+      "Set gridseed chip frequency"),
   OPT_WITH_ARG("--gridseed-chips",
-         opt_set_charp, NULL, &opt_gridseed_chips,
-         "Set gridseed chips count"),
+      opt_set_charp, NULL, &opt_gridseed_chips,
+      "Set gridseed chips count"),
 #endif
   OPT_WITHOUT_ARG("--load-balance",
       set_loadbalance, &pool_strategy,
       "Change multipool strategy from failover to quota based balance"),
   OPT_WITH_ARG("--log|-l",
-         set_int_0_to_9999, opt_show_intval, &opt_log_interval,
-         "Interval in seconds between log output"),
+      set_int_0_to_9999, opt_show_intval, &opt_log_interval,
+      "Interval in seconds between log output"),
   OPT_WITHOUT_ARG("--log-show-date|-L",
       opt_set_bool, &opt_log_show_date,
       "Show date on every log line"),
@@ -1400,18 +1475,18 @@ static struct opt_table opt_config_table[] = {
       "Minimise caching of shares for low memory applications"),
 #if defined(unix) || defined(__APPLE__)
   OPT_WITH_ARG("--monitor|-m",
-         opt_set_charp, NULL, &opt_stderr_cmd,
-         "Use custom pipe cmd for output messages"),
+      opt_set_charp, NULL, &opt_stderr_cmd,
+      "Use custom pipe cmd for output messages"),
 #endif // defined(unix)
   OPT_WITH_ARG("--name",
-         set_pool_name, NULL, NULL,
-         "Name of pool"),
+      set_pool_name, NULL, NULL,
+      "Name of pool"),
   OPT_WITHOUT_ARG("--net-delay",
       opt_set_bool, &opt_delaynet,
       "Impose small delays in networking to not overload slow routers"),
   OPT_WITH_ARG("--nfactor",
-         set_nfactor, NULL, NULL,
-         "Override default scrypt N-factor parameter."),
+      set_nfactor, NULL, NULL,
+      "Override default scrypt N-factor parameter."),
 #ifdef HAVE_ADL
   OPT_WITHOUT_ARG("--no-adl",
       opt_set_bool, &opt_noadl,
@@ -1431,19 +1506,19 @@ static struct opt_table opt_config_table[] = {
       "Do not attempt to restart GPUs that hang"),
   OPT_WITHOUT_ARG("--no-submit-stale",
       opt_set_invbool, &opt_submit_stale,
-            "Don't submit shares if they are detected as stale"),
+      "Don't submit shares if they are detected as stale"),
   OPT_WITHOUT_ARG("--extranonce-subscribe",
       set_extranonce_subscribe, NULL,
       "Enable 'extranonce' stratum subscribe"),
   OPT_WITH_ARG("--pass|-p",
-         set_pass, NULL, NULL,
-         "Password for bitcoin JSON-RPC server"),
+      set_pass, NULL, NULL,
+      "Password for bitcoin JSON-RPC server"),
   OPT_WITHOUT_ARG("--per-device-stats",
       opt_set_bool, &want_per_device_stats,
       "Force verbose mode and output per-device statistics"),
   OPT_WITH_ARG("--poolname", /* TODO: Backward compatibility, to be removed. */
-         set_poolname_deprecated, NULL, NULL,
-         opt_hidden),
+      set_poolname_deprecated, NULL, NULL,
+      opt_hidden),
   OPT_WITH_ARG("--priority",
        set_pool_priority, NULL, NULL,
        "Pool priority"),
@@ -1451,41 +1526,41 @@ static struct opt_table opt_config_table[] = {
       opt_set_bool, &opt_protocol,
       "Verbose dump of protocol-level activities"),
   OPT_WITH_ARG("--queue|-Q",
-         set_int_0_to_9999, opt_show_intval, &opt_queue,
-         "Minimum number of work items to have queued (0+)"),
+      set_int_0_to_9999, opt_show_intval, &opt_queue,
+      "Minimum number of work items to have queued (0+)"),
   OPT_WITHOUT_ARG("--quiet|-q",
       opt_set_bool, &opt_quiet,
       "Disable logging output, display status and errors"),
   OPT_WITH_ARG("--quota|-U",
-         set_quota, NULL, NULL,
-         "quota;URL combination for server with load-balance strategy quotas"),
+      set_quota, NULL, NULL,
+      "quota;URL combination for server with load-balance strategy quotas"),
   OPT_WITHOUT_ARG("--real-quiet",
       opt_set_bool, &opt_realquiet,
       "Disable all output"),
   OPT_WITHOUT_ARG("--remove-disabled",
-         opt_set_bool, &opt_removedisabled,
-           "Remove disabled devices entirely, as if they didn't exist"),
+      opt_set_bool, &opt_removedisabled,
+      "Remove disabled devices entirely, as if they didn't exist"),
   OPT_WITH_ARG("--retries",
-         set_null, NULL, NULL,
-         opt_hidden),
+      set_null, NULL, NULL,
+      opt_hidden),
   OPT_WITH_ARG("--retry-pause",
-         set_null, NULL, NULL,
-         opt_hidden),
+      set_null, NULL, NULL,
+      opt_hidden),
   OPT_WITH_ARG("--rotate",
-         set_rotate, opt_show_intval, &opt_rotate_period,
-         "Change multipool strategy from failover to regularly rotate at N minutes"),
+      set_rotate, opt_show_intval, &opt_rotate_period,
+      "Change multipool strategy from failover to regularly rotate at N minutes"),
   OPT_WITHOUT_ARG("--round-robin",
-         set_rr, &pool_strategy,
-         "Change multipool strategy from failover to round robin on failure"),
+      set_rr, &pool_strategy,
+      "Change multipool strategy from failover to round robin on failure"),
   OPT_WITH_ARG("--scan-time|-s",
-         set_int_0_to_9999, opt_show_intval, &opt_scantime,
-         "Upper bound on time spent scanning current work, in seconds"),
+      set_int_0_to_9999, opt_show_intval, &opt_scantime,
+      "Upper bound on time spent scanning current work, in seconds"),
   OPT_WITH_ARG("--sched-start",
-         set_schedtime, NULL, &schedstart,
-         "Set a time of day in HH:MM to start mining (a once off without a stop time)"),
+      set_schedtime, NULL, &schedstart,
+      "Set a time of day in HH:MM to start mining (a once off without a stop time)"),
   OPT_WITH_ARG("--sched-stop",
-         set_schedtime, NULL, &schedstop,
-         "Set a time of day in HH:MM to stop mining (will quit without a start time)"),
+      set_schedtime, NULL, &schedstop,
+      "Set a time of day in HH:MM to stop mining (will quit without a start time)"),
   OPT_WITH_ARG("--sj-nfmin",
       set_int_0_to_40, opt_show_intval, &sj_minNf,
       "Set min N factor for mining scrypt-jane"),
@@ -1496,20 +1571,23 @@ static struct opt_table opt_config_table[] = {
       opt_set_intval, opt_show_intval, &sj_startTime,
       "Set StartTime for mining scrypt-jane"),
   OPT_WITH_ARG("--shaders",
-         set_shaders, NULL, NULL,
-         "GPU shaders per card for tuning scrypt, comma separated"),
+      set_shaders, NULL, NULL,
+      "GPU shaders per card for tuning scrypt, comma separated"),
   OPT_WITH_ARG("--sharelog",
-         set_sharelog, NULL, NULL,
-         "Append share log to file"),
+      set_sharelog, NULL, NULL,
+      "Append share log to file"),
   OPT_WITH_ARG("--shares",
-         opt_set_intval, NULL, &opt_shares,
-         "Quit after mining N shares (default: unlimited)"),
+      opt_set_intval, NULL, &opt_shares,
+      "Quit after mining N shares (default: unlimited)"),
   OPT_WITH_ARG("--socks-proxy",
-         opt_set_charp, NULL, &opt_socks_proxy,
-         "Set socks4 proxy (host:port)"),
+      opt_set_charp, NULL, &opt_socks_proxy,
+      "Set socks4 proxy (host:port)"),
+  OPT_WITHOUT_ARG("--show-coindiff",
+      opt_set_bool, &opt_show_coindiff,
+      "Show coin difficulty rather than hash value of a share"),
   OPT_WITH_ARG("--state",
-         set_pool_state, NULL, NULL,
-         "Specify pool state at startup (default: enabled)"),
+      set_pool_state, NULL, NULL,
+      "Specify pool state at startup (default: enabled)"),
 #ifdef HAVE_SYSLOG_H
   OPT_WITHOUT_ARG("--syslog",
       opt_set_bool, &use_syslog,
@@ -1517,26 +1595,26 @@ static struct opt_table opt_config_table[] = {
 #endif
 #if defined(HAVE_LIBCURL) && defined(CURL_HAS_KEEPALIVE)
   OPT_WITH_ARG("--tcp-keepalive",
-         set_int_0_to_9999, opt_show_intval, &opt_tcp_keepalive,
-         "TCP keepalive packet idle time"),
+      set_int_0_to_9999, opt_show_intval, &opt_tcp_keepalive,
+      "TCP keepalive packet idle time"),
 #else
   OPT_WITH_ARG("--tcp-keepalive",
-         set_int_0_to_9999, opt_show_intval, &opt_tcp_keepalive,
-       opt_hidden),
+      set_int_0_to_9999, opt_show_intval, &opt_tcp_keepalive,
+      opt_hidden),
 #endif
 #ifdef HAVE_ADL
   OPT_WITH_ARG("--temp-cutoff",
-         set_temp_cutoff, opt_show_intval, &opt_cutofftemp,
-         "Temperature which a device will be automatically disabled at, one value or comma separated list"),
+      set_temp_cutoff, opt_show_intval, &opt_cutofftemp,
+      "Temperature which a device will be automatically disabled at, one value or comma separated list"),
   OPT_WITH_ARG("--temp-hysteresis",
-         set_int_1_to_10, opt_show_intval, &opt_hysteresis,
-         "Set how much the temperature can fluctuate outside limits when automanaging speeds"),
+      set_int_1_to_10, opt_show_intval, &opt_hysteresis,
+      "Set how much the temperature can fluctuate outside limits when automanaging speeds"),
   OPT_WITH_ARG("--temp-overheat",
-         set_temp_overheat, opt_show_intval, &opt_overheattemp,
-         "Temperature which a device will be throttled at while automanaging fan and/or GPU, one value or comma separated list"),
+      set_temp_overheat, opt_show_intval, &opt_overheattemp,
+      "Temperature which a device will be throttled at while automanaging fan and/or GPU, one value or comma separated list"),
   OPT_WITH_ARG("--temp-target",
-         set_temp_target, opt_show_intval, &opt_targettemp,
-         "Temperature which a device should stay at while automanaging fan and/or GPU, one value or comma separated list"),
+      set_temp_target, opt_show_intval, &opt_targettemp,
+      "Temperature which a device should stay at while automanaging fan and/or GPU, one value or comma separated list"),
 #endif
 #ifdef HAVE_CURSES
   OPT_WITHOUT_ARG("--text-only|-T",
@@ -1548,52 +1626,55 @@ static struct opt_table opt_config_table[] = {
       opt_hidden),
 #endif
   OPT_WITH_ARG("--thread-concurrency",
-         set_thread_concurrency, NULL, NULL,
-         "Set GPU thread concurrency for scrypt mining, comma separated"),
+      set_thread_concurrency, NULL, NULL,
+      "Set GPU thread concurrency for scrypt mining, comma separated"),
   OPT_WITH_ARG("--url|-o",
-         set_url, NULL, NULL,
-         "URL for bitcoin JSON-RPC server"),
+      set_url, NULL, NULL,
+      "URL for bitcoin JSON-RPC server"),
   OPT_WITH_ARG("--pool-algorithm",
-         set_pool_algorithm, NULL, NULL,
-         "Set algorithm for pool"),
+      set_pool_algorithm, NULL, NULL,
+      "Set algorithm for pool"),
   OPT_WITH_ARG("--pool-nfactor",
-         set_pool_nfactor, NULL, NULL,
-         "Set N-factor for pool"),
+      set_pool_nfactor, NULL, NULL,
+      "Set N-factor for pool"),
+  OPT_WITH_ARG("--pool-thread-concurrency",
+      set_pool_thread_concurrency, NULL, NULL,
+      "Set thread concurrency for pool"),
   OPT_WITH_ARG("--user|-u",
-         set_user, NULL, NULL,
-         "Username for bitcoin JSON-RPC server"),
+      set_user, NULL, NULL,
+      "Username for bitcoin JSON-RPC server"),
 #ifdef USE_USBUTILS
   OPT_WITH_ARG("--usb",
-         set_usb_select, NULL, NULL,
-         "USB device selection"),
+      set_usb_select, NULL, NULL,
+      "USB device selection"),
   OPT_WITH_ARG("--usb-dump",
-         set_int_0_to_10, opt_show_intval, &opt_usbdump,
-         opt_hidden),
+      set_int_0_to_10, opt_show_intval, &opt_usbdump,
+      opt_hidden),
   OPT_WITHOUT_ARG("--usb-list-all",
       opt_set_bool, &opt_usb_list_all,
       opt_hidden),
 #endif
   OPT_WITH_ARG("--vectors",
-         set_vector, NULL, NULL,
-         opt_hidden),
-         /* All current kernels only support vectors=1 */
-         /* "Override detected optimal vector (1, 2 or 4) - one value or comma separated list"), */
+      set_vector, NULL, NULL,
+      opt_hidden),
+      /* All current kernels only support vectors=1 */
+      /* "Override detected optimal vector (1, 2 or 4) - one value or comma separated list"), */
   OPT_WITHOUT_ARG("--verbose|-v",
       opt_set_bool, &opt_log_output,
       "Log verbose output to stderr as well as status output"),
   OPT_WITH_ARG("--worksize|-w",
-         set_worksize, NULL, NULL,
-         "Override detected optimal worksize - one value or comma separated list"),
+      set_worksize, NULL, NULL,
+      "Override detected optimal worksize - one value or comma separated list"),
   OPT_WITH_ARG("--userpass|-O",
-         set_userpass, NULL, NULL,
-         "Username:Password pair for bitcoin JSON-RPC server"),
+      set_userpass, NULL, NULL,
+      "Username:Password pair for bitcoin JSON-RPC server"),
   OPT_WITHOUT_ARG("--worktime",
       opt_set_bool, &opt_worktime,
       "Display extra work time debug information"),
   OPT_WITH_ARG("--pools",
       opt_set_bool, NULL, NULL, opt_hidden),
   OPT_WITH_ARG("--difficulty-multiplier",
-      set_difficulty_multiplier, NULL, NULL, 
+      set_difficulty_multiplier, NULL, NULL,
       "Difficulty multiplier for jobs received from stratum pools"),
   OPT_ENDTABLE
 };
@@ -1700,6 +1781,7 @@ static char *load_config(const char *arg, void __maybe_unused *unused)
 #endif
   if (!json_is_object(config)) {
     siz = JSON_LOAD_ERROR_LEN + strlen(arg) + strlen(err.text);
+    // TODO: memory leak
     json_error = (char *)malloc(siz);
     if (!json_error)
       quit(1, "Malloc failure in json error");
@@ -1768,13 +1850,13 @@ char *display_devs(int *ndevs)
 /* These options are available from commandline only */
 static struct opt_table opt_cmdline_table[] = {
   OPT_WITH_ARG("--config|-c",
-         load_config, NULL, NULL,
-         "Load a JSON-format configuration file\n"
-         "See example.conf for an example configuration."),
+      load_config, NULL, NULL,
+      "Load a JSON-format configuration file\n"
+      "See example.conf for an example configuration."),
   OPT_WITH_ARG("--default-config",
-         set_default_config, NULL, NULL,
-         "Specify the filename of the default config file\n"
-         "Loaded at start and used when saving without a name."),
+      set_default_config, NULL, NULL,
+      "Specify the filename of the default config file\n"
+      "Loaded at start and used when saving without a name."),
   OPT_WITHOUT_ARG("--help|-h",
       opt_verusage_and_exit, NULL,
       "Print this message"),
@@ -1862,7 +1944,6 @@ void free_work(struct work *w)
   free(w);
 }
 
-static void gen_hash(unsigned char *data, unsigned char *hash, size_t len);
 static void calc_diff(struct work *work, double known);
 char *workpadding = "000000800000000000000000000000000000000000000000000000000000000000000000000000000000000080020000";
 
@@ -1909,7 +1990,7 @@ static bool __build_gbt_txns(struct pool *pool, json_t *res_val)
     if (unlikely(!hex2bin(txn_bin, txn, txn_len / 2)))
       quit(1, "Failed to hex2bin txn_bin");
 
-    gen_hash(txn_bin, pool->txn_hashes + (32 * i), txn_len / 2);
+    gen_hash(txn_bin, txn_len / 2, pool->txn_hashes + (32 * i));
     free(txn_bin);
   }
 out:
@@ -1925,7 +2006,7 @@ static unsigned char *__gbt_merkleroot(struct pool *pool)
   if (unlikely(!merkle_hash))
     quit(1, "Failed to calloc merkle_hash in __gbt_merkleroot");
 
-  gen_hash(pool->coinbase, merkle_hash, pool->coinbase_len);
+  gen_hash(pool->coinbase, pool->coinbase_len, merkle_hash);
 
   if (pool->gbt_txns)
     memcpy(merkle_hash + 32, pool->txn_hashes, pool->gbt_txns * 32);
@@ -1939,7 +2020,7 @@ static unsigned char *__gbt_merkleroot(struct pool *pool)
     for (i = 0; i < txns; i += 2){
       unsigned char hashout[32];
 
-      gen_hash(merkle_hash + (i * 32), hashout, 64);
+      gen_hash(merkle_hash + (i * 32), 64, hashout);
       memcpy(merkle_hash + (i / 2 * 32), hashout, 32);
     }
     txns /= 2;
@@ -1982,6 +2063,16 @@ static void update_gbt(struct pool *pool)
     applog(LOG_DEBUG, "FAILED to update GBT from %s", get_pool_name(pool));
   }
   curl_easy_cleanup(curl);
+}
+
+/* Return the work coin/network difficulty */
+static double get_work_blockdiff(const struct work *work)
+{
+  uint8_t pow = work->data[72];
+  int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
+  uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
+  double numerator = work->pool->algorithm.diff_numerator << powdiff;
+  return numerator / (double)diff32;
 }
 
 static void gen_gbt_work(struct pool *pool, struct work *work)
@@ -2409,6 +2500,30 @@ static int attr_bad = A_BOLD;
 } while (0)
 
 /* Must be called with curses mutex lock held and curses_active */
+static void curses_print_uptime(void)
+{
+  struct timeval now, tv;
+  unsigned int days, hours;
+  div_t d;
+
+  cgtime(&now);
+  timersub(&now, &total_tv_start, &tv);
+  d = div(tv.tv_sec, 86400);
+  days = d.quot;
+  d = div(d.rem, 3600);
+  hours = d.quot;
+  d = div(d.rem, 60);
+  cg_wprintw(statuswin, " - [%u day%c %02d:%02d:%02d]"
+    , days
+    , (days == 1) ? ' ' : 's'
+    , hours
+    , d.quot
+    , d.rem
+  );
+}
+
+
+/* Must be called with curses mutex lock held and curses_active */
 static void curses_print_status(void)
 {
   struct pool *pool = current_pool();
@@ -2416,6 +2531,7 @@ static void curses_print_status(void)
 
   wattron(statuswin, A_BOLD);
   cg_mvwprintw(statuswin, line, 0, PACKAGE " " VERSION " - Started: %s", datestamp);
+  curses_print_uptime();
   wattroff(statuswin, A_BOLD);
 
   wattron(statuswin, menu_attr);
@@ -2454,13 +2570,13 @@ static void curses_print_status(void)
 
 static void adj_width(int var, int *length)
 {
-  if ((int)(log10(var) + 1) > *length)
+  if ((int)(log10((double)var) + 1) > *length)
     (*length)++;
 }
 
 static void adj_fwidth(float var, int *length)
 {
-  if ((int)(log10(var) + 1) > *length)
+  if ((int)(log10((double)var) + 1) > *length)
     (*length)++;
 }
 
@@ -2827,17 +2943,23 @@ static void show_hash(struct work *work, char *hashshow)
   uint32_t *hash32;
   int ofs;
 
-  swab256(rhash, work->hash);
-  for (ofs = 0; ofs <= 28; ofs ++) {
-    if (rhash[ofs])
-      break;
-  }
-  hash32 = (uint32_t *)(rhash + ofs);
-  h32 = be32toh(*hash32);
   suffix_string_double(work->share_diff, diffdisp, sizeof (diffdisp), 0);
   suffix_string_double(work->work_difficulty, wdiffdisp, sizeof (wdiffdisp), 0);
-  snprintf(hashshow, 64, "%08lx Diff %s/%s%s", h32, diffdisp, wdiffdisp,
-     work->block ? " BLOCK!" : "");
+  if (opt_show_coindiff) {
+    snprintf(hashshow, 64, "Coin %.0f Diff %s/%s%s", get_work_blockdiff(work), diffdisp, wdiffdisp,
+     work->block? " BLOCK!" : "");
+  } else {
+    swab256(rhash, work->hash);
+    for (ofs = 0; ofs <= 28; ofs ++) {
+      if (rhash[ofs])
+        break;
+    }
+    hash32 = (uint32_t *)(rhash + ofs);
+    h32 = be32toh(*hash32);
+
+    snprintf(hashshow, 64, "%08lx Diff %s/%s%s", h32, diffdisp, wdiffdisp,
+       work->block ? " BLOCK!" : "");
+  }
 }
 
 #ifdef HAVE_LIBCURL
@@ -3239,7 +3361,6 @@ static void calc_diff(struct work *work, double known)
 {
   struct sgminer_pool_stats *pool_stats = &(work->pool->sgminer_pool_stats);
   double difficulty;
-  uint64_t uintdiff;
 
   if (known)
     work->work_difficulty = known;
@@ -3446,7 +3567,7 @@ static
 #ifdef WIN32
 const
 #endif
-char **initial_args;
+const char **initial_args;
 
 static void clean_up(bool restarting);
 
@@ -3896,13 +4017,13 @@ static double share_diff(const struct work *work)
   double d64, s64;
   double ret;
 
-  d64 = work->pool->algorithm.diff_multiplier2 * truediffone;
+  d64 = work->pool->algorithm.share_diff_multiplier * truediffone;
   s64 = le256todouble(work->hash);
   if (unlikely(!s64))
     s64 = 0;
 
   ret = d64 / s64;
-  applog(LOG_DEBUG, "Found share with difficulty %f", ret);
+  applog(LOG_DEBUG, "Found share with difficulty %.3f", ret);
 
   cg_wlock(&control_lock);
   if (unlikely(ret > best_diff)) {
@@ -4223,11 +4344,7 @@ static int block_sort(struct block *blocka, struct block *blockb)
 /* Decode the current block difficulty which is in packed form */
 static void set_blockdiff(const struct work *work)
 {
-  uint8_t pow = work->data[72];
-  int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
-  uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
-  double numerator = work->pool->algorithm.diff_numerator << powdiff;
-  double ddiff = numerator / (double)diff32;
+  double ddiff = get_work_blockdiff(work);
 
   if (unlikely(current_diff != ddiff)) {
     suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
@@ -4486,6 +4603,7 @@ void write_config(FILE *fcfg)
   for(i = 0; i < total_pools; i++) {
     struct pool *pool = pools[i];
 
+    fprintf(fcfg, "%s", i > 0 ? "," : "");
     /* Using get_pool_name() here is unsafe if opt_incognito is true. */
     if (strcmp(pool->name, "") != 0) {
       fprintf(fcfg, "\n\t\t\"name\" : \"%s\",", json_escape(pool->name));
@@ -4494,24 +4612,31 @@ void write_config(FILE *fcfg)
       fprintf(fcfg, "\n\t\t\"description\" : \"%s\",", json_escape(pool->description));
     }
     if (pool->quota != 1) {
-      fprintf(fcfg, "%s\n\t{\n\t\t\"quota\" : \"%s%s%s%d;%s\",", i > 0 ? "," : "",
+      fprintf(fcfg, "\n\t{\n\t\t\"quota\" : \"%s%s%s%d;%s\"",
         pool->rpc_proxy ? json_escape((char *)proxytype(pool->rpc_proxytype)) : "",
         pool->rpc_proxy ? json_escape(pool->rpc_proxy) : "",
         pool->rpc_proxy ? "|" : "",
         pool->quota,
         json_escape(pool->rpc_url));
     } else {
-      fprintf(fcfg, "%s\n\t{\n\t\t\"url\" : \"%s%s%s%s\",", i > 0 ? "," : "",
+      fprintf(fcfg, "\n\t{\n\t\t\"url\" : \"%s%s%s%s\"",
         pool->rpc_proxy ? json_escape((char *)proxytype(pool->rpc_proxytype)) : "",
         pool->rpc_proxy ? json_escape(pool->rpc_proxy) : "",
         pool->rpc_proxy ? "|" : "",
         json_escape(pool->rpc_url));
     }
     if (pool->extranonce_subscribe)
-      fputs("\n\t\t\"extranonce-subscribe\" : true,", fcfg);
-    fprintf(fcfg, "\n\t\t\"user\" : \"%s\",", json_escape(pool->rpc_user));
-    fprintf(fcfg, "\n\t\t\"pass\" : \"%s\"\n\t}", json_escape(pool->rpc_pass));
+      fprintf(fcfg, ",\n\t\t\"extranonce-subscribe\" : true");
+    fprintf(fcfg, ",\n\t\t\"user\" : \"%s\"", json_escape(pool->rpc_user));
+    fprintf(fcfg, ",\n\t\t\"pass\" : \"%s\"", json_escape(pool->rpc_pass));
+    if (!cmp_algorithm(&pool->algorithm, &default_algorithm)) {
+      fprintf(fcfg, ",\n\t\t\"algorithm\" : \"%s\"", json_escape((char *)pool->algorithm.name));
     }
+    if (pool->prio != i) {
+      fprintf(fcfg, ",\n\t\t\"priority\" : \"%d\"", pool->prio);
+    }
+    fprintf(fcfg, "\n\t}");
+  }
   fputs("\n]\n", fcfg);
 
   /* Write only if there are usable GPUs */
@@ -4538,6 +4663,12 @@ void write_config(FILE *fcfg)
     for(i = 0; i < nDevs; i++)
       fprintf(fcfg, "%s%d", i > 0 ? "," : "",
         (int)gpus[i].work_size);
+
+    fputs("\",\n\"algorithm\" : \"", fcfg);
+    for(i = 0; i < nDevs; i++) {
+      fprintf(fcfg, "%s", i > 0 ? "," : "");
+      fprintf(fcfg, "%s", gpus[i].algorithm.name);
+    }
 
     fputs("\",\n\"kernel\" : \"", fcfg);
     for(i = 0; i < nDevs; i++) {
@@ -5766,6 +5897,7 @@ static void *stratum_sthread(void *userdata)
       continue;
     }
 
+    // TODO: check for memory leaks
     sshare = (struct stratum_share *)calloc(sizeof(struct stratum_share), 1);
     hash32 = (uint32_t *)work->hash;
     submitted = false;
@@ -6137,15 +6269,7 @@ out_unlock:
   return work;
 }
 
-static void gen_hash(unsigned char *data, unsigned char *hash, size_t len)
-{
-  unsigned char hash1[32];
-
-  sha256(data, len, hash1);
-  sha256(hash1, 32, hash);
-}
-
-void set_target(algorithm_t algorithm, unsigned char *dest_target, double diff)
+void set_target(unsigned char *dest_target, double diff, double diff_multiplier2)
 {
   unsigned char target[32];
   uint64_t *data64, h64;
@@ -6157,8 +6281,7 @@ void set_target(algorithm_t algorithm, unsigned char *dest_target, double diff)
     diff = 1.0;
   }
 
-  // FIXME: is target set right?
-  d64 = algorithm.diff_multiplier2 * truediffone;
+  d64 = diff_multiplier2 * truediffone;
   d64 /= diff;
 
   dcut64 = d64 / bits192;
@@ -6221,14 +6344,11 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
   cg_dwlock(&pool->data_lock);
 
   /* Generate merkle root */
-  if ((pool->algorithm.algo == ALGO_FUGUECOIN) || (pool->algorithm.algo == ALGO_GROESTLCOIN) || (pool->algorithm.algo == ALGO_TWECOIN))
-    sha256(pool->coinbase, pool->swork.cb_len, merkle_root);
-  else
-    gen_hash(pool->coinbase, merkle_root, pool->swork.cb_len);
-    memcpy(merkle_sha, merkle_root, 32);
+  pool->algorithm.gen_hash(pool->coinbase, pool->swork.cb_len, merkle_root);
+  memcpy(merkle_sha, merkle_root, 32);
   for (i = 0; i < pool->swork.merkles; i++) {
     memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
-    gen_hash(merkle_sha, merkle_root, 64);
+    gen_hash(merkle_sha, 64, merkle_root);
     memcpy(merkle_sha, merkle_root, 32);
   }
   data32 = (uint32_t *)merkle_sha;
@@ -6263,7 +6383,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
   }
 
   calc_midstate(work);
-  set_target(pool->algorithm, work->target, work->sdiff);
+  set_target(work->target, work->sdiff, pool->algorithm.diff_multiplier2);
 
   local_work++;
   work->pool = pool;
@@ -6279,6 +6399,8 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 
   cgtime(&work->tv_staged);
 }
+
+static void *restart_mining_threads_thread(void *userdata);
 
 static void get_work_prepare_thread(struct thr_info *mythr, struct work *work)
 {
@@ -6297,21 +6419,74 @@ static void get_work_prepare_thread(struct thr_info *mythr, struct work *work)
 
   // If all threads are waiting now
   if (algo_switch_n >= mining_threads) {
+    bool soft_restart = !work->pool->gpu_threads;
     rd_lock(&mining_thr_lock);
     // Shutdown all threads first (necessary)
-    for (i = 0; i < mining_threads; i++) {
-      struct thr_info *thr = mining_thr[i];
-      thr->cgpu->drv->thread_shutdown(thr);
+    if (soft_restart) {
+      for (i = 0; i < mining_threads; i++) {
+        struct thr_info *thr = mining_thr[i];
+        thr->cgpu->drv->thread_shutdown(thr);
+      }
     }
+    // Reset stats (e.g. for working_diff to be set properly in hash_sole_work)
+    zero_stats();
+    // Apply other pool-specific settings
+    // TODO: when config parser is improved, add else statements and set
+    //       to default intensity
+    if (work->pool->intensity)
+      set_intensity(work->pool->intensity);
+    if (work->pool->xintensity)
+      set_xintensity(work->pool->xintensity);
+    if (work->pool->rawintensity)
+      set_rawintensity(work->pool->rawintensity);
+    if (work->pool->thread_concurrency)
+      set_thread_concurrency(work->pool->thread_concurrency);
+    #ifdef HAVE_ADL
+      if (work->pool->gpu_engine) {
+        set_gpu_engine(work->pool->gpu_engine);
+        for (i = 0; i < nDevs; i++)
+          set_engineclock(i, gpus[i].min_engine);
+      }
+      if (work->pool->gpu_memclock) {
+        set_gpu_memclock(work->pool->gpu_memclock);
+        for (i = 0; i < nDevs; i++)
+          set_memoryclock(i, gpus[i].gpu_memclock);
+      }
+      if (work->pool->gpu_fan) {
+        set_gpu_fan(work->pool->gpu_fan);
+        for (i = 0; i < nDevs; i++)
+          if (gpus[i].min_fan == gpus[i].gpu_fan)
+            set_fanspeed(i, gpus[i].gpu_fan);
+      }
+    #endif
     // Change algorithm for each thread (thread_prepare calls initCl)
     for (i = 0; i < mining_threads; i++) {
       struct thr_info *thr = mining_thr[i];
       thr->cgpu->algorithm = work->pool->algorithm;
-      thr->cgpu->drv->thread_prepare(thr);
+      if (soft_restart)
+        thr->cgpu->drv->thread_prepare(thr);
+
+      // Necessary because algorithms can have dramatically different diffs
+      thr->cgpu->drv->working_diff = 1;
     }
     rd_unlock(&mining_thr_lock);
+    // Finish switching pools
     algo_switch_n = 0;
     mutex_unlock(&algo_switch_lock);
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    // Hard restart (when gpu_threads is changed)
+    if (!soft_restart) {
+      unsigned int n_threads = 0;
+      pthread_t restart_thr;
+      set_gpu_threads(work->pool->gpu_threads);
+      for (i = 0; i < total_devices; ++i)
+        n_threads += devices[i]->threads;
+
+      if (unlikely(pthread_create(&restart_thr, NULL, restart_mining_threads_thread, (void *) (intptr_t)n_threads)))
+        quit(1, "restart_mining_threads create thread failed");
+      sleep(60);
+      quit(1, "thread was not cancelled in 60 seconds after restart_mining_threads");
+    }
     // Signal other threads to start working now
     mutex_lock(&algo_switch_wait_lock);
     pthread_cond_broadcast(&algo_switch_wait_cond);
@@ -6319,12 +6494,12 @@ static void get_work_prepare_thread(struct thr_info *mythr, struct work *work)
   // Not all threads are waiting, join the waiting list
   } else {
     mutex_unlock(&algo_switch_lock);
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     // Wait for signal to start working again
     mutex_lock(&algo_switch_wait_lock);
     pthread_cond_wait(&algo_switch_wait_cond, &algo_switch_wait_lock);
     mutex_unlock(&algo_switch_wait_lock);
   }
-  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 }
 
 struct work *get_work(struct thr_info *thr, const int thr_id)
@@ -6424,7 +6599,8 @@ static void rebuild_nonce(struct work *work, uint32_t nonce)
 {
   uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
 
-  if (work->pool->algorithm.algo == ALGO_SCRYPT_JANE) {
+//  if (work->pool->algorithm.algo == ALGO_SCRYPT_JANE) {
+  if (0) {
     *work_nonce = htobe32(nonce);
   } else {
     *work_nonce = htole32(nonce);
@@ -6439,7 +6615,7 @@ bool test_nonce(struct work *work, uint32_t nonce)
   uint32_t diff1targ;
 
   rebuild_nonce(work, nonce);
-  diff1targ = 0x0000ffffUL;
+  diff1targ = work->pool->algorithm.diff1targ;
 
   return (le32toh(*hash_32) <= diff1targ);
 }
@@ -6459,11 +6635,11 @@ bool test_nonce_diff(struct work *work, uint32_t nonce, double diff)
 static void update_work_stats(struct thr_info *thr, struct work *work)
 {
   double test_diff = current_diff;
-  test_diff *= work->pool->algorithm.diff_multiplier2;
+  test_diff *= work->pool->algorithm.share_diff_multiplier;
 
   work->share_diff = share_diff(work);
 
-  test_diff *= work->pool->algorithm.diff_multiplier2;
+  test_diff *= work->pool->algorithm.share_diff_multiplier;
 
   if (unlikely(work->share_diff >= test_diff)) {
     work->block = true;
@@ -6618,7 +6794,7 @@ static void hash_sole_work(struct thr_info *mythr)
       work->device_diff = MIN(drv->working_diff, work->work_difficulty);
     } else if (drv->working_diff > work->work_difficulty)
       drv->working_diff = work->work_difficulty;
-    set_target(work->pool->algorithm, work->device_target, work->device_diff);
+    set_target(work->device_target, work->device_diff, work->pool->algorithm.diff_multiplier2);
 
     do {
       cgtime(&tv_start);
@@ -8109,7 +8285,7 @@ void enable_device(struct cgpu_info *cgpu)
 #endif
   }
   if (cgpu->drv->drv_id == DRIVER_opencl) {
-    gpu_threads += cgpu->threads;
+    mining_threads += cgpu->threads;
   }
   rwlock_init(&cgpu->qlock);
   cgpu->queued_work = NULL;
@@ -8190,6 +8366,7 @@ static void hotplug_process(void)
   }
 
   wr_lock(&mining_thr_lock);
+//TODO: ezt egyesiteni a masikkal
   mining_thr = realloc(mining_thr, sizeof(thr) * (mining_threads + new_threads + 1));
 
   if (!mining_thr)
@@ -8214,7 +8391,7 @@ static void hotplug_process(void)
       thr->cgpu = cgpu;
       thr->device_thread = j;
 
-      if (cgpu->drv->thread_prepare && !cgpu->drv->thread_prepare(thr))
+      if (!cgpu->drv->thread_prepare(thr))
         continue;
 
       if (unlikely(thr_info_create(thr, NULL, miner_thread, thr)))
@@ -8289,6 +8466,84 @@ static void probe_pools(void)
   }
 }
 
+static void restart_mining_threads(unsigned int new_n_threads)
+{
+  struct thr_info *thr;
+  unsigned int i, j, k;
+
+  // Stop and free threads
+  if (mining_thr) {
+    for (i = 0; i < mining_threads; i++) {
+      mining_thr[i]->cgpu->shutdown = true;
+    }
+    kill_mining();
+    for (i = 0; i < mining_threads; i++) {
+      thr = mining_thr[i];
+      thr->cgpu->drv->thread_shutdown(thr);
+      thr->cgpu->shutdown = false;
+    }
+    for (i = 0; i < total_devices; ++i) {
+      free(devices[i]->thr);
+    }
+    for (i = 0; i < mining_threads; i++) {
+      free(mining_thr[i]);
+    }
+    free(mining_thr);
+  }
+
+  // Alloc
+  mining_threads = (int) new_n_threads;
+#ifdef HAVE_CURSES
+  adj_width(mining_threads, &dev_width);
+#endif
+  mining_thr = (struct thr_info **)calloc(mining_threads, sizeof(thr));
+  if (!mining_thr)
+    quit(1, "Failed to calloc mining_thr");
+  for (i = 0; i < mining_threads; i++) {
+    mining_thr[i] = (struct thr_info *)calloc(1, sizeof(*thr));
+    if (!mining_thr[i])
+      quit(1, "Failed to calloc mining_thr[%d]", i);
+  }
+
+  // Start threads
+  k = 0;
+  for (i = 0; i < total_devices; ++i) {
+    struct cgpu_info *cgpu = devices[i];
+    cgpu->thr = (struct thr_info **)malloc(sizeof(*cgpu->thr) * (cgpu->threads+1));
+    cgpu->thr[cgpu->threads] = NULL;
+    cgpu->status = LIFE_INIT;
+
+    for (j = 0; j < cgpu->threads; ++j, ++k) {
+      thr = get_thread(k);
+      thr->id = k;
+      thr->cgpu = cgpu;
+      thr->device_thread = j;
+
+      if (!cgpu->drv->thread_prepare(thr))
+        continue;
+
+      if (unlikely(thr_info_create(thr, NULL, miner_thread, thr)))
+        quit(1, "thread %d create failed", thr->id);
+
+      cgpu->thr[j] = thr;
+
+      /* Enable threads for devices set not to mine but disable
+       * their queue in case we wish to enable them later */
+      if (cgpu->deven != DEV_DISABLED) {
+        applog(LOG_DEBUG, "Pushing sem post to thread %d", thr->id);
+        cgsem_post(&thr->sem);
+      }
+    }
+  }
+}
+
+static void *restart_mining_threads_thread(void *userdata)
+{
+  restart_mining_threads((unsigned int) (intptr_t) userdata);
+
+  return NULL;
+}
+
 #define DRIVER_FILL_DEVICE_DRV(X) fill_device_drv(&X##_drv);
 #define DRIVER_DRV_DETECT_ALL(X) X##_drv.drv_detect(false);
 
@@ -8338,8 +8593,7 @@ int main(int argc, char *argv[])
 #endif
   struct thr_info *thr;
   struct block *block;
-  unsigned int k;
-  int i, j;
+  int i;
   char *s;
 
   /* This dangerous function tramples random dynamically allocated
@@ -8355,7 +8609,7 @@ int main(int argc, char *argv[])
 
   initial_args = (const char **)malloc(sizeof(char *)* (argc + 1));
   for  (i = 0; i < argc; i++)
-    initial_args[i] = strdup(argv[i]);
+    initial_args[i] = (const char *)strdup(argv[i]);
   initial_args[argc] = NULL;
 
   mutex_init(&hash_lock);
@@ -8637,45 +8891,7 @@ int main(int argc, char *argv[])
       fork_monitor();
   #endif // defined(unix)
 
-    mining_thr = (struct thr_info **)calloc(mining_threads, sizeof(thr));
-  if (!mining_thr)
-    quit(1, "Failed to calloc mining_thr");
-  for (i = 0; i < mining_threads; i++) {
-    mining_thr[i] = (struct thr_info *)calloc(1, sizeof(*thr));
-    if (!mining_thr[i])
-      quit(1, "Failed to calloc mining_thr[%d]", i);
-  }
-
-  // Start threads
-  k = 0;
-  for (i = 0; i < total_devices; ++i) {
-    struct cgpu_info *cgpu = devices[i];
-    cgpu->thr = (struct thr_info **)malloc(sizeof(*cgpu->thr) * (cgpu->threads+1));
-    cgpu->thr[cgpu->threads] = NULL;
-    cgpu->status = LIFE_INIT;
-
-    for (j = 0; j < cgpu->threads; ++j, ++k) {
-      thr = get_thread(k);
-      thr->id = k;
-      thr->cgpu = cgpu;
-      thr->device_thread = j;
-
-      if (!cgpu->drv->thread_prepare(thr))
-        continue;
-
-      if (unlikely(thr_info_create(thr, NULL, miner_thread, thr)))
-        quit(1, "thread %d create failed", thr->id);
-
-      cgpu->thr[j] = thr;
-
-      /* Enable threads for devices set not to mine but disable
-       * their queue in case we wish to enable them later */
-      if (cgpu->deven != DEV_DISABLED) {
-        applog(LOG_DEBUG, "Pushing sem post to thread %d", thr->id);
-        cgsem_post(&thr->sem);
-      }
-    }
-  }
+  restart_mining_threads(mining_threads);
 
   if (opt_benchmark)
     goto begin_bench;

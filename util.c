@@ -1643,11 +1643,11 @@ static bool parse_diff(struct pool *pool, json_t *val)
 {
 	double old_diff, diff;
 
-	if (opt_diff_mult == 0)
+	if (opt_diff_mult == 0.0)
 		diff = json_number_value(json_array_get(val, 0)) * pool->algorithm.diff_multiplier1;
 	else
 		diff = json_number_value(json_array_get(val, 0)) * opt_diff_mult;
-		
+
 	if (diff == 0)
 		return false;
 
@@ -1671,7 +1671,7 @@ static bool parse_diff(struct pool *pool, json_t *val)
 
 static bool parse_extranonce(struct pool *pool, json_t *val)
 {
-	char s[RBUFSIZE], *nonce1;
+	char *nonce1;
 	int n2size;
 
 	nonce1 = json_array_string(val, 0);
@@ -1760,7 +1760,7 @@ static bool send_version(struct pool *pool, json_t *val)
 {
 	char s[RBUFSIZE];
 	int id = json_integer_value(json_object_get(val, "id"));
-	
+
 	if (!id)
 		return false;
 
@@ -2641,40 +2641,6 @@ void *realloc_strcat(char *ptr, char *s)
 	return ret;
 }
 
-/* Make a text readable version of a string using 0xNN for < ' ' or > '~'
- * Including 0x00 at the end
- * You must free the result yourself */
-void *str_text(char *ptr)
-{
-	unsigned char *uptr;
-	char *ret, *txt;
-
-	if (ptr == NULL) {
-		ret = strdup("(null)");
-
-		if (unlikely(!ret))
-			quithere(1, "Failed to malloc null");
-	}
-
-	uptr = (unsigned char *)ptr;
-
-	ret = txt = (char *)malloc(strlen(ptr) * 4 + 5); // Guaranteed >= needed
-	if (unlikely(!txt))
-		quithere(1, "Failed to malloc txt");
-
-	do {
-		if (*uptr < ' ' || *uptr > '~') {
-			sprintf(txt, "0x%02x", *uptr);
-			txt += 4;
-		} else
-			*(txt++) = *uptr;
-	} while (*(uptr++));
-
-	*txt = '\0';
-
-	return ret;
-}
-
 void RenameThread(const char* name)
 {
 	char buf[16];
@@ -2900,10 +2866,11 @@ bool cg_completion_timeout(void *fn, void *fnarg, int timeout)
 	pthread_create(&pthread, NULL, completion_thread, (void *)cgc);
 
 	ret = cgsem_mswait(&cgc->cgsem, timeout);
-	if (!ret) {
-		pthread_join(pthread, NULL);
-		free(cgc);
-	} else
+
+	if (ret)
 		pthread_cancel(pthread);
+
+	pthread_join(pthread, NULL);
+	free(cgc);
 	return !ret;
 }
