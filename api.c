@@ -36,10 +36,10 @@
 #endif
 
 // BUFSIZ varies on Windows and Linux
-#define TMPBUFSIZ  8192
+#define TMPBUFSIZ 8192
 
 // Number of requests to queue - normally would be small
-#define QUEUE  100
+#define QUEUE 100
 
 #if defined WIN32
 static char WSAbuf[1024];
@@ -49,56 +49,56 @@ struct WSAERRORS {
   char *code;
 } WSAErrors[] = {
   { 0,      "No error" },
-  { WSAEINTR,    "Interrupted system call" },
-  { WSAEBADF,    "Bad file number" },
+  { WSAEINTR,   "Interrupted system call" },
+  { WSAEBADF,   "Bad file number" },
   { WSAEACCES,    "Permission denied" },
   { WSAEFAULT,    "Bad address" },
   { WSAEINVAL,    "Invalid argument" },
   { WSAEMFILE,    "Too many open sockets" },
-  { WSAEWOULDBLOCK,  "Operation would block" },
-  { WSAEINPROGRESS,  "Operation now in progress" },
+  { WSAEWOULDBLOCK, "Operation would block" },
+  { WSAEINPROGRESS, "Operation now in progress" },
   { WSAEALREADY,    "Operation already in progress" },
   { WSAENOTSOCK,    "Socket operation on non-socket" },
   { WSAEDESTADDRREQ,  "Destination address required" },
   { WSAEMSGSIZE,    "Message too long" },
   { WSAEPROTOTYPE,  "Protocol wrong type for socket" },
-  { WSAENOPROTOOPT,  "Bad protocol option" },
-  { WSAEPROTONOSUPPORT,  "Protocol not supported" },
-  { WSAESOCKTNOSUPPORT,  "Socket type not supported" },
+  { WSAENOPROTOOPT, "Bad protocol option" },
+  { WSAEPROTONOSUPPORT, "Protocol not supported" },
+  { WSAESOCKTNOSUPPORT, "Socket type not supported" },
   { WSAEOPNOTSUPP,  "Operation not supported on socket" },
   { WSAEPFNOSUPPORT,  "Protocol family not supported" },
   { WSAEAFNOSUPPORT,  "Address family not supported" },
   { WSAEADDRINUSE,  "Address already in use" },
-  { WSAEADDRNOTAVAIL,  "Can't assign requested address" },
+  { WSAEADDRNOTAVAIL, "Can't assign requested address" },
   { WSAENETDOWN,    "Network is down" },
-  { WSAENETUNREACH,  "Network is unreachable" },
-  { WSAENETRESET,    "Net connection reset" },
+  { WSAENETUNREACH, "Network is unreachable" },
+  { WSAENETRESET,   "Net connection reset" },
   { WSAECONNABORTED,  "Software caused connection abort" },
   { WSAECONNRESET,  "Connection reset by peer" },
-  { WSAENOBUFS,    "No buffer space available" },
-  { WSAEISCONN,    "Socket is already connected" },
+  { WSAENOBUFS,   "No buffer space available" },
+  { WSAEISCONN,   "Socket is already connected" },
   { WSAENOTCONN,    "Socket is not connected" },
-  { WSAESHUTDOWN,    "Can't send after socket shutdown" },
+  { WSAESHUTDOWN,   "Can't send after socket shutdown" },
   { WSAETOOMANYREFS,  "Too many references, can't splice" },
-  { WSAETIMEDOUT,    "Connection timed out" },
+  { WSAETIMEDOUT,   "Connection timed out" },
   { WSAECONNREFUSED,  "Connection refused" },
-  { WSAELOOP,    "Too many levels of symbolic links" },
+  { WSAELOOP,   "Too many levels of symbolic links" },
   { WSAENAMETOOLONG,  "File name too long" },
-  { WSAEHOSTDOWN,    "Host is down" },
+  { WSAEHOSTDOWN,   "Host is down" },
   { WSAEHOSTUNREACH,  "No route to host" },
-  { WSAENOTEMPTY,    "Directory not empty" },
+  { WSAENOTEMPTY,   "Directory not empty" },
   { WSAEPROCLIM,    "Too many processes" },
   { WSAEUSERS,    "Too many users" },
   { WSAEDQUOT,    "Disc quota exceeded" },
   { WSAESTALE,    "Stale NFS file handle" },
-  { WSAEREMOTE,    "Too many levels of remote in path" },
-  { WSASYSNOTREADY,  "Network system is unavailable" },
-  { WSAVERNOTSUPPORTED,  "Winsock version out of range" },
+  { WSAEREMOTE,   "Too many levels of remote in path" },
+  { WSASYSNOTREADY, "Network system is unavailable" },
+  { WSAVERNOTSUPPORTED, "Winsock version out of range" },
   { WSANOTINITIALISED,  "WSAStartup not yet called" },
-  { WSAEDISCON,    "Graceful shutdown in progress" },
+  { WSAEDISCON,   "Graceful shutdown in progress" },
   { WSAHOST_NOT_FOUND,  "Host not found" },
-  { WSANO_DATA,    "No host data of that type was found" },
-  { -1,      "Unknown error code" }
+  { WSANO_DATA,   "No host data of that type was found" },
+  { -1,     "Unknown error code" }
 };
 
 char *WSAErrorMsg(void) {
@@ -172,68 +172,69 @@ static const char *OSINFO =
       "Unknown";
 #endif
 
-#define _DEVS    "DEVS"
+#define _DEVS   "DEVS"
 #define _POOLS    "POOLS"
 #define _SUMMARY  "SUMMARY"
-#define _STATUS    "STATUS"
+#define _STATUS   "STATUS"
 #define _VERSION  "VERSION"
-#define _MINECONFIG  "CONFIG"
+#define _MINECONFIG "CONFIG"
 #define _GPU    "GPU"
 
 #ifdef HAVE_AN_ASIC
 #define _ASC    "ASC"
 #endif
 
-#define _GPUS    "GPUS"
+#define _GPUS   "GPUS"
 #define _ASCS    "ASCS"
-#define _NOTIFY    "NOTIFY"
-#define _DEVDETAILS  "DEVDETAILS"
+#define _NOTIFY   "NOTIFY"
+#define _DEVDETAILS "DEVDETAILS"
 #define _BYE    "BYE"
 #define _RESTART  "RESTART"
 #define _MINESTATS  "STATS"
 #define _CHECK    "CHECK"
-#define _MINECOIN  "COIN"
-#define _DEBUGSET  "DEBUG"
+#define _MINECOIN "COIN"
+#define _DEBUGSET "DEBUG"
 #define _SETCONFIG  "SETCONFIG"
 #define _USBSTATS  "USBSTATS"
 
 static const char ISJSON = '{';
-#define JSON0    "{"
-#define JSON1    "\""
-#define JSON2    "\":["
-#define JSON3    "]"
-#define JSON4    ",\"id\":1"
+#define JSON0   "{"
+#define JSON1   "\""
+#define JSON2   "\":["
+#define JSON3   "]"
+#define JSON4   ",\"id\":1"
 // If anyone cares, id=0 for truncated output
-#define JSON4_TRUNCATED  ",\"id\":0"
-#define JSON5    "}"
+#define JSON4_TRUNCATED ",\"id\":0"
+#define JSON5   "}"
 
 #define JSON_START  JSON0
-#define JSON_DEVS  JSON1 _DEVS JSON2
+#define JSON_DEVS JSON1 _DEVS JSON2
 #define JSON_POOLS  JSON1 _POOLS JSON2
 #define JSON_SUMMARY  JSON1 _SUMMARY JSON2
-#define JSON_STATUS  JSON1 _STATUS JSON2
+#define JSON_STATUS JSON1 _STATUS JSON2
 #define JSON_VERSION  JSON1 _VERSION JSON2
-#define JSON_MINECONFIG  JSON1 _MINECONFIG JSON2
+#define JSON_MINECONFIG JSON1 _MINECONFIG JSON2
 #define JSON_GPU  JSON1 _GPU JSON2
 
 #ifdef HAVE_AN_ASIC
 #define JSON_ASC  JSON1 _ASC JSON2
 #endif
 
-#define JSON_GPUS  JSON1 _GPUS JSON2
-#define JSON_ASCS  JSON1 _ASCS JSON2
-#define JSON_NOTIFY  JSON1 _NOTIFY JSON2
-#define JSON_DEVDETAILS  JSON1 _DEVDETAILS JSON2
+#define JSON_GPUS JSON1 _GPUS JSON2
+#define JSON_ASCS JSON1 _ASCS JSON2
+#define JSON_NOTIFY JSON1 _NOTIFY JSON2
+#define JSON_DEVDETAILS JSON1 _DEVDETAILS JSON2
 #define JSON_CLOSE  JSON3
 #define JSON_MINESTATS  JSON1 _MINESTATS JSON2
 #define JSON_CHECK  JSON1 _CHECK JSON2
-#define JSON_MINECOIN  JSON1 _MINECOIN JSON2
-#define JSON_DEBUGSET  JSON1 _DEBUGSET JSON2
-#define JSON_SETCONFIG  JSON1 _SETCONFIG JSON2
-#define JSON_USBSTATS  JSON1 _USBSTATS JSON2
+#define JSON_MINECOIN JSON1 _MINECOIN JSON2
+#define JSON_DEBUGSET JSON1 _DEBUGSET JSON2
+#define JSON_SETCONFIG JSON1 _SETCONFIG JSON2
+#define JSON_USBSTATS JSON1 _USBSTATS JSON2
+
 #define JSON_END  JSON4 JSON5
 #define JSON_END_TRUNCATED  JSON4_TRUNCATED JSON5
-#define JSON_BETWEEN_JOIN  ","
+#define JSON_BETWEEN_JOIN ","
 
 static const char *JSON_COMMAND = "command";
 static const char *JSON_PARAMETER = "parameter";
@@ -392,124 +393,124 @@ struct CODES {
   const enum code_parameters params;
   const char *description;
 } codes[] = {
- { SEVERITY_ERR,   MSG_INVGPU,  PARAM_GPUMAX,  "Invalid GPU id %d - range is 0 - %d" },
+ { SEVERITY_ERR,   MSG_INVGPU,  PARAM_GPUMAX, "Invalid GPU id %d - range is 0 - %d" },
  { SEVERITY_INFO,  MSG_ALRENA,  PARAM_GPU,  "GPU %d already enabled" },
  { SEVERITY_INFO,  MSG_ALRDIS,  PARAM_GPU,  "GPU %d already disabled" },
  { SEVERITY_WARN,  MSG_GPUMRE,  PARAM_GPU,  "GPU %d must be restarted first" },
  { SEVERITY_INFO,  MSG_GPUREN,  PARAM_GPU,  "GPU %d sent enable message" },
- { SEVERITY_ERR,   MSG_GPUNON,  PARAM_NONE,  "No GPUs" },
- { SEVERITY_SUCC,  MSG_POOL,  PARAM_PMAX,  "%d Pool(s)" },
- { SEVERITY_ERR,   MSG_NOPOOL,  PARAM_NONE,  "No pools" },
+ { SEVERITY_ERR,   MSG_GPUNON,  PARAM_NONE, "No GPUs" },
+ { SEVERITY_SUCC,  MSG_POOL,  PARAM_PMAX, "%d Pool(s)" },
+ { SEVERITY_ERR,   MSG_NOPOOL,  PARAM_NONE, "No pools" },
 
- { SEVERITY_SUCC,  MSG_DEVS,  PARAM_DMAX,  "%d GPU(s)"
+ { SEVERITY_SUCC,  MSG_DEVS,  PARAM_DMAX,   "%d GPU(s)"
 #ifdef HAVE_AN_ASIC
             "%d ASC(s)"
 #endif
  },
 
- { SEVERITY_ERR,   MSG_NODEVS,  PARAM_NONE,  "No GPUs"
+ { SEVERITY_ERR,   MSG_NODEVS,  PARAM_NONE, "No GPUs"
 #ifdef HAVE_AN_ASIC
             "/ASCs"
 #endif
  },
 
- { SEVERITY_SUCC,  MSG_SUMM,  PARAM_NONE,  "Summary" },
+ { SEVERITY_SUCC,  MSG_SUMM,  PARAM_NONE, "Summary" },
  { SEVERITY_INFO,  MSG_GPUDIS,  PARAM_GPU,  "GPU %d set disable flag" },
  { SEVERITY_INFO,  MSG_GPUREI,  PARAM_GPU,  "GPU %d restart attempted" },
- { SEVERITY_ERR,   MSG_INVCMD,  PARAM_NONE,  "Invalid command" },
- { SEVERITY_ERR,   MSG_MISID,  PARAM_NONE,  "Missing device id parameter" },
+ { SEVERITY_ERR,   MSG_INVCMD,  PARAM_NONE, "Invalid command" },
+ { SEVERITY_ERR,   MSG_MISID, PARAM_NONE, "Missing device id parameter" },
  { SEVERITY_SUCC,  MSG_GPUDEV,  PARAM_GPU,  "GPU%d" },
- { SEVERITY_SUCC,  MSG_NUMGPU,  PARAM_NONE,  "GPU count" },
+ { SEVERITY_SUCC,  MSG_NUMGPU,  PARAM_NONE, "GPU count" },
  { SEVERITY_SUCC,  MSG_NUMASC,  PARAM_NONE,  "ASC count" },
- { SEVERITY_SUCC,  MSG_VERSION,  PARAM_NONE,  "SGMiner versions" },
- { SEVERITY_ERR,   MSG_INVJSON,  PARAM_NONE,  "Invalid JSON" },
+ { SEVERITY_SUCC,  MSG_VERSION, PARAM_NONE, "SGMiner versions" },
+ { SEVERITY_ERR,   MSG_INVJSON, PARAM_NONE, "Invalid JSON" },
  { SEVERITY_ERR,   MSG_MISCMD,  PARAM_CMD,  "Missing JSON '%s'" },
- { SEVERITY_ERR,   MSG_MISPID,  PARAM_NONE,  "Missing pool id parameter" },
+ { SEVERITY_ERR,   MSG_MISPID,  PARAM_NONE, "Missing pool id parameter" },
  { SEVERITY_ERR,   MSG_INVPID,  PARAM_POOLMAX,  "Invalid pool id %d - range is 0 - %d" },
- { SEVERITY_SUCC,  MSG_SWITCHP,  PARAM_POOL,  "Switching to pool %d:'%s'" },
- { SEVERITY_ERR,   MSG_MISVAL,  PARAM_NONE,  "Missing comma after GPU number" },
- { SEVERITY_ERR,   MSG_NOADL,  PARAM_NONE,  "ADL is not available" },
+ { SEVERITY_SUCC,  MSG_SWITCHP, PARAM_POOL, "Switching to pool %d:'%s'" },
+ { SEVERITY_ERR,   MSG_MISVAL,  PARAM_NONE, "Missing comma after GPU number" },
+ { SEVERITY_ERR,   MSG_NOADL, PARAM_NONE, "ADL is not available" },
  { SEVERITY_ERR,   MSG_NOGPUADL,PARAM_GPU,  "GPU %d does not have ADL" },
  { SEVERITY_ERR,   MSG_INVINT,  PARAM_STR,  "Invalid intensity (%s) - must be '" _DYNAMIC  "' or range " MIN_INTENSITY_STR " - " MAX_INTENSITY_STR },
- { SEVERITY_INFO,  MSG_GPUINT,  PARAM_BOTH,  "GPU %d set new intensity to %s" },
- { SEVERITY_SUCC,  MSG_MINECONFIG,PARAM_NONE,  "sgminer config" },
- { SEVERITY_ERR,   MSG_GPUMERR,  PARAM_BOTH,  "Setting GPU %d memoryclock to (%s) reported failure" },
- { SEVERITY_SUCC,  MSG_GPUMEM,  PARAM_BOTH,  "Setting GPU %d memoryclock to (%s) reported success" },
- { SEVERITY_ERR,   MSG_GPUEERR,  PARAM_BOTH,  "Setting GPU %d clock to (%s) reported failure" },
- { SEVERITY_SUCC,  MSG_GPUENG,  PARAM_BOTH,  "Setting GPU %d clock to (%s) reported success" },
- { SEVERITY_ERR,   MSG_GPUVERR,  PARAM_BOTH,  "Setting GPU %d vddc to (%s) reported failure" },
- { SEVERITY_SUCC,  MSG_GPUVDDC,  PARAM_BOTH,  "Setting GPU %d vddc to (%s) reported success" },
- { SEVERITY_ERR,   MSG_GPUFERR,  PARAM_BOTH,  "Setting GPU %d fan to (%s) reported failure" },
- { SEVERITY_SUCC,  MSG_GPUFAN,  PARAM_BOTH,  "Setting GPU %d fan to (%s) reported success" },
- { SEVERITY_ERR,   MSG_MISFN,  PARAM_NONE,  "Missing save filename parameter" },
- { SEVERITY_ERR,   MSG_BADFN,  PARAM_STR,  "Can't open or create save file '%s'" },
- { SEVERITY_SUCC,  MSG_SAVED,  PARAM_STR,  "Configuration saved to file '%s'" },
- { SEVERITY_ERR,   MSG_ACCDENY,  PARAM_STR,  "Access denied to '%s' command" },
- { SEVERITY_SUCC,  MSG_ACCOK,  PARAM_NONE,  "Privileged access OK" },
- { SEVERITY_SUCC,  MSG_ENAPOOL,  PARAM_POOL,  "Enabling pool %d:'%s'" },
- { SEVERITY_SUCC,  MSG_POOLPRIO,PARAM_NONE,  "Changed pool priorities" },
+ { SEVERITY_INFO,  MSG_GPUINT,  PARAM_BOTH, "GPU %d set new intensity to %s" },
+ { SEVERITY_SUCC,  MSG_MINECONFIG,PARAM_NONE, "sgminer config" },
+ { SEVERITY_ERR,   MSG_GPUMERR, PARAM_BOTH, "Setting GPU %d memoryclock to (%s) reported failure" },
+ { SEVERITY_SUCC,  MSG_GPUMEM,  PARAM_BOTH, "Setting GPU %d memoryclock to (%s) reported success" },
+ { SEVERITY_ERR,   MSG_GPUEERR, PARAM_BOTH, "Setting GPU %d clock to (%s) reported failure" },
+ { SEVERITY_SUCC,  MSG_GPUENG,  PARAM_BOTH, "Setting GPU %d clock to (%s) reported success" },
+ { SEVERITY_ERR,   MSG_GPUVERR, PARAM_BOTH, "Setting GPU %d vddc to (%s) reported failure" },
+ { SEVERITY_SUCC,  MSG_GPUVDDC, PARAM_BOTH, "Setting GPU %d vddc to (%s) reported success" },
+ { SEVERITY_ERR,   MSG_GPUFERR, PARAM_BOTH, "Setting GPU %d fan to (%s) reported failure" },
+ { SEVERITY_SUCC,  MSG_GPUFAN,  PARAM_BOTH, "Setting GPU %d fan to (%s) reported success" },
+ { SEVERITY_ERR,   MSG_MISFN, PARAM_NONE, "Missing save filename parameter" },
+ { SEVERITY_ERR,   MSG_BADFN, PARAM_STR,  "Can't open or create save file '%s'" },
+ { SEVERITY_SUCC,  MSG_SAVED, PARAM_STR,  "Configuration saved to file '%s'" },
+ { SEVERITY_ERR,   MSG_ACCDENY, PARAM_STR,  "Access denied to '%s' command" },
+ { SEVERITY_SUCC,  MSG_ACCOK, PARAM_NONE, "Privileged access OK" },
+ { SEVERITY_SUCC,  MSG_ENAPOOL, PARAM_POOL, "Enabling pool %d:'%s'" },
+ { SEVERITY_SUCC,  MSG_POOLPRIO,PARAM_NONE, "Changed pool priorities" },
  { SEVERITY_ERR,   MSG_DUPPID,  PARAM_PID,  "Duplicate pool specified %d" },
- { SEVERITY_SUCC,  MSG_DISPOOL,  PARAM_POOL,  "Disabling pool %d:'%s'" },
- { SEVERITY_INFO,  MSG_ALRENAP,  PARAM_POOL,  "Pool %d:'%s' already enabled" },
- { SEVERITY_INFO,  MSG_ALRDISP,  PARAM_POOL,  "Pool %d:'%s' already disabled" },
- { SEVERITY_ERR,   MSG_MISPDP,  PARAM_NONE,  "Missing addpool details" },
+ { SEVERITY_SUCC,  MSG_DISPOOL, PARAM_POOL, "Disabling pool %d:'%s'" },
+ { SEVERITY_INFO,  MSG_ALRENAP, PARAM_POOL, "Pool %d:'%s' already enabled" },
+ { SEVERITY_INFO,  MSG_ALRDISP, PARAM_POOL, "Pool %d:'%s' already disabled" },
+ { SEVERITY_ERR,   MSG_MISPDP,  PARAM_NONE, "Missing addpool details" },
  { SEVERITY_ERR,   MSG_INVPDP,  PARAM_STR,  "Invalid addpool details '%s'" },
- { SEVERITY_ERR,   MSG_TOOMANYP,PARAM_NONE,  "Reached maximum number of pools (%d)" },
- { SEVERITY_SUCC,  MSG_ADDPOOL,  PARAM_STR,  "Added pool '%s'" },
- { SEVERITY_ERR,   MSG_REMLASTP,PARAM_POOL,  "Cannot remove last pool %d:'%s'" },
- { SEVERITY_ERR,   MSG_ACTPOOL, PARAM_POOL,  "Cannot remove active pool %d:'%s'" },
- { SEVERITY_SUCC,  MSG_REMPOOL, PARAM_BOTH,  "Removed pool %d:'%s'" },
- { SEVERITY_SUCC,  MSG_NOTIFY,  PARAM_NONE,  "Notify" },
- { SEVERITY_SUCC,  MSG_DEVDETAILS,PARAM_NONE,  "Device Details" },
+ { SEVERITY_ERR,   MSG_TOOMANYP,PARAM_NONE, "Reached maximum number of pools (%d)" },
+ { SEVERITY_SUCC,  MSG_ADDPOOL, PARAM_STR,  "Added pool '%s'" },
+ { SEVERITY_ERR,   MSG_REMLASTP,PARAM_POOL, "Cannot remove last pool %d:'%s'" },
+ { SEVERITY_ERR,   MSG_ACTPOOL, PARAM_POOL, "Cannot remove active pool %d:'%s'" },
+ { SEVERITY_SUCC,  MSG_REMPOOL, PARAM_BOTH, "Removed pool %d:'%s'" },
+ { SEVERITY_SUCC,  MSG_NOTIFY,  PARAM_NONE, "Notify" },
+ { SEVERITY_SUCC,  MSG_DEVDETAILS,PARAM_NONE, "Device Details" },
  { SEVERITY_SUCC,  MSG_MINESTATS,PARAM_NONE,  "sgminer stats" },
- { SEVERITY_ERR,   MSG_MISCHK,  PARAM_NONE,  "Missing check cmd" },
- { SEVERITY_SUCC,  MSG_CHECK,  PARAM_NONE,  "Check command" },
- { SEVERITY_ERR,   MSG_MISBOOL,  PARAM_NONE,  "Missing parameter: true/false" },
- { SEVERITY_ERR,   MSG_INVBOOL,  PARAM_NONE,  "Invalid parameter should be true or false" },
- { SEVERITY_SUCC,  MSG_FOO,  PARAM_BOOL,  "Failover-Only set to %s" },
- { SEVERITY_SUCC,  MSG_MINECOIN,PARAM_NONE,  "sgminer coin" },
- { SEVERITY_SUCC,  MSG_DEBUGSET,PARAM_NONE,  "Debug settings" },
- { SEVERITY_SUCC,  MSG_SETCONFIG,PARAM_SET,  "Set config '%s' to %d" },
+ { SEVERITY_ERR,   MSG_MISCHK,  PARAM_NONE, "Missing check cmd" },
+ { SEVERITY_SUCC,  MSG_CHECK, PARAM_NONE, "Check command" },
+ { SEVERITY_ERR,   MSG_MISBOOL, PARAM_NONE, "Missing parameter: true/false" },
+ { SEVERITY_ERR,   MSG_INVBOOL, PARAM_NONE, "Invalid parameter should be true or false" },
+ { SEVERITY_SUCC,  MSG_FOO, PARAM_BOOL, "Failover-Only set to %s" },
+ { SEVERITY_SUCC,  MSG_MINECOIN,PARAM_NONE, "sgminer coin" },
+ { SEVERITY_SUCC,  MSG_DEBUGSET,PARAM_NONE, "Debug settings" },
+ { SEVERITY_SUCC,  MSG_SETCONFIG,PARAM_SET, "Set config '%s' to %d" },
  { SEVERITY_ERR,   MSG_UNKCON,  PARAM_STR,  "Unknown config '%s'" },
- { SEVERITY_ERR,   MSG_INVNUM,  PARAM_BOTH,  "Invalid number (%d) for '%s' range is 0-9999" },
- { SEVERITY_ERR,   MSG_INVNEG,  PARAM_BOTH,  "Invalid negative number (%d) for '%s'" },
+ { SEVERITY_ERR,   MSG_INVNUM,  PARAM_BOTH, "Invalid number (%d) for '%s' range is 0-9999" },
+ { SEVERITY_ERR,   MSG_INVNEG,  PARAM_BOTH, "Invalid negative number (%d) for '%s'" },
  { SEVERITY_SUCC,  MSG_SETQUOTA,PARAM_SET,  "Set pool '%s' to quota %d'" },
- { SEVERITY_ERR,   MSG_CONPAR,  PARAM_NONE,  "Missing config parameters 'name,N'" },
+ { SEVERITY_ERR,   MSG_CONPAR,  PARAM_NONE, "Missing config parameters 'name,N'" },
  { SEVERITY_ERR,   MSG_CONVAL,  PARAM_STR,  "Missing config value N for '%s,N'" },
- { SEVERITY_SUCC,  MSG_USBSTA,  PARAM_NONE,  "USB Statistics" },
- { SEVERITY_INFO,  MSG_NOUSTA,  PARAM_NONE,  "No USB Statistics" },
- { SEVERITY_ERR,   MSG_ZERMIS,  PARAM_NONE,  "Missing zero parameters" },
+ { SEVERITY_SUCC,  MSG_USBSTA,  PARAM_NONE, "USB Statistics" },
+ { SEVERITY_INFO,  MSG_NOUSTA,  PARAM_NONE, "No USB Statistics" },
+ { SEVERITY_ERR,   MSG_ZERMIS,  PARAM_NONE, "Missing zero parameters" },
  { SEVERITY_ERR,   MSG_ZERINV,  PARAM_STR,  "Invalid zero parameter '%s'" },
  { SEVERITY_SUCC,  MSG_ZERSUM,  PARAM_STR,  "Zeroed %s stats with summary" },
- { SEVERITY_SUCC,  MSG_ZERNOSUM, PARAM_STR,  "Zeroed %s stats without summary" },
+ { SEVERITY_SUCC,  MSG_ZERNOSUM, PARAM_STR, "Zeroed %s stats without summary" },
 #ifdef USE_USBUTILS
- { SEVERITY_ERR,   MSG_ASCUSBNODEV, PARAM_ASC,  "ASC%d has no device" },
+ { SEVERITY_ERR,   MSG_ASCUSBNODEV, PARAM_ASC, "ASC%d has no device" },
 #endif
- { SEVERITY_ERR,   MSG_INVHPLG,  PARAM_STR,  "Invalid value for hotplug (%s) must be 0..9999" },
- { SEVERITY_SUCC,  MSG_HOTPLUG,  PARAM_INT,  "Hotplug check set to %ds" },
- { SEVERITY_SUCC,  MSG_DISHPLG,  PARAM_NONE,  "Hotplug disabled" },
- { SEVERITY_WARN,  MSG_NOHPLG,  PARAM_NONE,  "Hotplug is not available" },
- { SEVERITY_ERR,   MSG_MISHPLG,  PARAM_NONE,  "Missing hotplug parameter" },
+ { SEVERITY_ERR,   MSG_INVHPLG,  PARAM_STR, "Invalid value for hotplug (%s) must be 0..9999" },
+ { SEVERITY_SUCC,  MSG_HOTPLUG,  PARAM_INT, "Hotplug check set to %ds" },
+ { SEVERITY_SUCC,  MSG_DISHPLG,  PARAM_NONE, "Hotplug disabled" },
+ { SEVERITY_WARN,  MSG_NOHPLG,  PARAM_NONE, "Hotplug is not available" },
+ { SEVERITY_ERR,   MSG_MISHPLG,  PARAM_NONE, "Missing hotplug parameter" },
 #ifdef HAVE_AN_ASIC
- { SEVERITY_ERR,   MSG_ASCNON,  PARAM_NONE,  "No ASCs" },
- { SEVERITY_SUCC,  MSG_ASCDEV,  PARAM_ASC,  "ASC%d" },
+ { SEVERITY_ERR,   MSG_ASCNON,  PARAM_NONE, "No ASCs" },
+ { SEVERITY_SUCC,  MSG_ASCDEV,  PARAM_ASC, "ASC%d" },
  { SEVERITY_ERR,   MSG_INVASC,  PARAM_ASCMAX,  "Invalid ASC id %d - range is 0 - %d" },
- { SEVERITY_INFO,  MSG_ASCLRENA,PARAM_ASC,  "ASC %d already enabled" },
- { SEVERITY_INFO,  MSG_ASCLRDIS,PARAM_ASC,  "ASC %d already disabled" },
- { SEVERITY_INFO,  MSG_ASCENA,  PARAM_ASC,  "ASC %d sent enable message" },
- { SEVERITY_INFO,  MSG_ASCDIS,  PARAM_ASC,  "ASC %d set disable flag" },
- { SEVERITY_ERR,   MSG_ASCUNW,  PARAM_ASC,  "ASC %d is not flagged WELL, cannot enable" },
- { SEVERITY_SUCC,  MSG_ASCIDENT,PARAM_ASC,  "Identify command sent to ASC%d" },
- { SEVERITY_WARN,  MSG_ASCNOID,  PARAM_ASC,  "ASC%d does not support identify" },
- { SEVERITY_ERR,   MSG_MISASCOPT, PARAM_NONE,  "Missing option after ASC number" },
- { SEVERITY_WARN,  MSG_ASCNOSET, PARAM_ASC,  "ASC %d does not support ascset" },
- { SEVERITY_INFO,  MSG_ASCHELP, PARAM_BOTH,  "ASC %d set help: %s" },
- { SEVERITY_SUCC,  MSG_ASCSETOK, PARAM_BOTH,  "ASC %d set OK" },
- { SEVERITY_ERR,   MSG_ASCSETERR, PARAM_BOTH,  "ASC %d set failed: %s" },
+ { SEVERITY_INFO,  MSG_ASCLRENA,PARAM_ASC, "ASC %d already enabled" },
+ { SEVERITY_INFO,  MSG_ASCLRDIS,PARAM_ASC, "ASC %d already disabled" },
+ { SEVERITY_INFO,  MSG_ASCENA,  PARAM_ASC, "ASC %d sent enable message" },
+ { SEVERITY_INFO,  MSG_ASCDIS,  PARAM_ASC, "ASC %d set disable flag" },
+ { SEVERITY_ERR,   MSG_ASCUNW,  PARAM_ASC, "ASC %d is not flagged WELL, cannot enable" },
+ { SEVERITY_SUCC,  MSG_ASCIDENT,PARAM_ASC, "Identify command sent to ASC%d" },
+ { SEVERITY_WARN,  MSG_ASCNOID,  PARAM_ASC, "ASC%d does not support identify" },
+ { SEVERITY_ERR,   MSG_MISASCOPT, PARAM_NONE, "Missing option after ASC number" },
+ { SEVERITY_WARN,  MSG_ASCNOSET, PARAM_ASC, "ASC %d does not support ascset" },
+ { SEVERITY_INFO,  MSG_ASCHELP, PARAM_BOTH, "ASC %d set help: %s" },
+ { SEVERITY_SUCC,  MSG_ASCSETOK, PARAM_BOTH, "ASC %d set OK" },
+ { SEVERITY_ERR,   MSG_ASCSETERR, PARAM_BOTH, "ASC %d set failed: %s" },
 #endif
- { SEVERITY_SUCC,  MSG_LOCKOK,  PARAM_NONE,  "Lock stats created" },
- { SEVERITY_WARN,  MSG_LOCKDIS,  PARAM_NONE,  "Lock stats not enabled" },
- { SEVERITY_SUCC,  MSG_BYE,    PARAM_STR,  "%s" },
+ { SEVERITY_SUCC,  MSG_LOCKOK,  PARAM_NONE, "Lock stats created" },
+ { SEVERITY_WARN,  MSG_LOCKDIS, PARAM_NONE, "Lock stats not enabled" },
+ { SEVERITY_SUCC,  MSG_BYE,   PARAM_STR,  "%s" },
  { SEVERITY_FAIL, 0, (enum code_parameters)0, NULL }
 };
 
@@ -524,7 +525,7 @@ static pthread_mutex_t quit_restart_lock;
 static bool do_a_quit;
 static bool do_a_restart;
 
-static time_t when = 0;  // when the request occurred
+static time_t when = 0; // when the request occurred
 
 struct IP4ACCESS {
   in_addr_t ip;
@@ -1286,8 +1287,8 @@ static void message(struct io_data *io_data, int messageid, int paramid, char *p
 
 #define LOCK_FMT_FFL " - called from %s %s():%d"
 
-#define LOCKMSG(fmt, ...)  fprintf(stderr, "APILOCK: " fmt "\n", ##__VA_ARGS__)
-#define LOCKMSGMORE(fmt, ...)  fprintf(stderr, "          " fmt "\n", ##__VA_ARGS__)
+#define LOCKMSG(fmt, ...) fprintf(stderr, "APILOCK: " fmt "\n", ##__VA_ARGS__)
+#define LOCKMSGMORE(fmt, ...) fprintf(stderr, "          " fmt "\n", ##__VA_ARGS__)
 #define LOCKMSGFFL(fmt, ...) fprintf(stderr, "APILOCK: " fmt LOCK_FMT_FFL "\n", ##__VA_ARGS__, file, func, linenum)
 #define LOCKMSGFLUSH() fflush(stderr)
 
@@ -1355,10 +1356,10 @@ static LOCKLIST *newlock(void *lock, enum cglock_typ typ, const char *file, cons
 {
   LOCKLIST *list;
 
-  list = calloc(1, sizeof(*list));
+  list = (LOCKLIST *)calloc(1, sizeof(*list));
   if (!list)
     quithere(1, "OOM list");
-  list->info = calloc(1, sizeof(*(list->info)));
+  list->info = (LOCKINFO *)calloc(1, sizeof(*(list->info)));
   if (!list->info)
     quithere(1, "OOM info");
   list->next = lockhead;
@@ -1395,10 +1396,10 @@ static void addgettry(LOCKINFO *info, uint64_t id, const char *file, const char 
   LOCKSTAT *stat;
   LOCKLINE *line;
 
-  stat = calloc(1, sizeof(*stat));
+  stat = (LOCKSTAT *)calloc(1, sizeof(*stat));
   if (!stat)
     quithere(1, "OOM stat");
-  line = calloc(1, sizeof(*line));
+  line = (LOCKLINE *)calloc(1, sizeof(*line));
   if (!line)
     quithere(1, "OOM line");
 
@@ -2223,8 +2224,9 @@ static void gpuenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
     return;
   }
 
+  rd_lock(&mining_thr_lock);
   for (i = 0; i < mining_threads; i++) {
-    thr = get_thread(i);
+    thr = mining_thr[i];
     gpu = thr->cgpu->device_id;
     if (gpu == id) {
       if (thr->cgpu->status != LIFE_WELL) {
@@ -2236,6 +2238,7 @@ static void gpuenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
       cgsem_post(&thr->sem);
     }
   }
+  rd_unlock(&mining_thr_lock);
 
   message(io_data, MSG_GPUREN, id, NULL, isjson);
 }
@@ -3514,8 +3517,9 @@ static void ascenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
   }
 #endif
 
+  rd_lock(&mining_thr_lock);
   for (i = 0; i < mining_threads; i++) {
-    thr = get_thread(i);
+    thr = mining_thr[i];
     asc = thr->cgpu->sgminer_id;
     if (asc == dev) {
       cgpu->deven = DEV_ENABLED;
@@ -3523,6 +3527,7 @@ static void ascenable(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char
       cgsem_post(&thr->sem);
     }
   }
+  rd_unlock(&mining_thr_lock);
 
   message(io_data, MSG_ASCENA, id, NULL, isjson);
 }
@@ -3701,44 +3706,44 @@ struct CMDS {
   bool iswritemode;
   bool joinable;
 } cmds[] = {
-  { "version",    apiversion,  false,  true },
-  { "config",    minerconfig,  false,  true },
-  { "devs",    devstatus,  false,  true },
-  { "pools",    poolstatus,  false,  true },
+  { "version",    apiversion, false,  true },
+  { "config",   minerconfig,  false,  true },
+  { "devs",   devstatus,  false,  true },
+  { "pools",    poolstatus, false,  true },
   { "summary",    summary,  false,  true },
-  { "gpuenable",          gpuenable,      true,  false },
-  { "gpudisable",         gpudisable,     true,  false },
-  { "gpurestart",         gpurestart,     true,  false },
+  { "gpuenable",          gpuenable,      true, false },
+  { "gpudisable",         gpudisable,     true, false },
+  { "gpurestart",         gpurestart,     true, false },
   { "gpu",                gpudev,         false,  false },
   { "gpucount",           gpucount,       false,  true },
-  { "switchpool",    switchpool,  true,  false },
-  { "addpool",    addpool,  true,  false },
-  { "poolpriority",  poolpriority,  true,  false },
-  { "poolquota",    poolquota,  true,  false },
-  { "enablepool",    enablepool,  true,  false },
-  { "disablepool",  disablepool,  true,  false },
-  { "removepool",    removepool,  true,  false },
-  { "gpuintensity",       gpuintensity,   true,  false },
-  { "gpumem",             gpumem,         true,  false },
-  { "gpuengine",          gpuengine,      true,  false },
-  { "gpufan",             gpufan,         true,  false },
-  { "gpuvddc",            gpuvddc,        true,  false },
-  { "save",    dosave,    true,  false },
-  { "quit",    doquit,    true,  false },
-  { "privileged",    privileged,  true,  false },
-  { "notify",    notify,    false,  true },
-  { "devdetails",    devdetails,  false,  true },
-  { "restart",    dorestart,  true,  false },
-  { "stats",    minerstats,  false,  true },
-  { "check",    checkcommand,  false,  false },
-  { "failover-only",  failoveronly,  true,  false },
-  { "coin",    minecoin,  false,  true },
-  { "debug",    debugstate,  true,  false },
-  { "setconfig",    setconfig,  true,  false },
+  { "switchpool",   switchpool, true, false },
+  { "addpool",    addpool,  true, false },
+  { "poolpriority", poolpriority, true, false },
+  { "poolquota",    poolquota,  true, false },
+  { "enablepool",   enablepool, true, false },
+  { "disablepool",  disablepool,  true, false },
+  { "removepool",   removepool, true, false },
+  { "gpuintensity",       gpuintensity,   true, false },
+  { "gpumem",             gpumem,         true, false },
+  { "gpuengine",          gpuengine,      true, false },
+  { "gpufan",             gpufan,         true, false },
+  { "gpuvddc",            gpuvddc,        true, false },
+  { "save",   dosave,   true, false },
+  { "quit",   doquit,   true, false },
+  { "privileged",   privileged, true, false },
+  { "notify",   notify,   false,  true },
+  { "devdetails",   devdetails, false,  true },
+  { "restart",    dorestart,  true, false },
+  { "stats",    minerstats, false,  true },
+  { "check",    checkcommand, false,  false },
+  { "failover-only",  failoveronly, true, false },
+  { "coin",   minecoin, false,  true },
+  { "debug",    debugstate, true, false },
+  { "setconfig",    setconfig,  true, false },
   { "usbstats",    usbstats,  false,  true },
-  { "zero",    dozero,    true,  false },
+  { "zero",   dozero,   true, false },
   { "hotplug",    dohotplug,  true,  false },
-  { "lockstats",    lockstats,  true,  true },
+  { "lockstats",    lockstats,  true, true },
 #ifdef HAVE_AN_ASIC
   { "asc",    ascdev,    false,  true },
   { "ascenable",    ascenable,  true,  false },
@@ -3747,7 +3752,7 @@ struct CMDS {
   { "ascset",    ascset,    true,  false },
 #endif
   { "asccount",    asccount,  false,  true },
-  { NULL,      NULL,    false,  false }
+  { NULL,     NULL,   false,  false }
 };
 
 static void checkcommand(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, bool isjson, char group)

@@ -293,9 +293,8 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
   /* Create binary filename based on parameters passed to opencl
    * compiler to ensure we only load a binary that matches what
    * would have otherwise created. The filename is:
-   * name + kernelname + g + lg + lookup_gap + tc + thread_concurrency + nf + nfactor + w + work_size + l + sizeof(long) + .bin
+   * name + g + lg + lookup_gap + tc + thread_concurrency + nf + nfactor + w + work_size + l + sizeof(long) + .bin
    */
-  char binaryfilename[255];
   char filename[255];
   char strbuf[32];
 
@@ -306,7 +305,6 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
 
   sprintf(strbuf, "%s.cl", cgpu->kernelname);
   strcpy(filename, strbuf);
-  strcpy(binaryfilename, cgpu->kernelname);
 
   /* For some reason 2 vectors is still better even if the card says
    * otherwise, and many cards lie about their max so use 256 as max
@@ -345,7 +343,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
     cgpu->lookup_gap = 2;
   }
 
-  if ((strcmp(cgpu->algorithm.name, "bufius") == 0) && ((cgpu->lookup_gap != 2) && (cgpu->lookup_gap != 4) && (cgpu->lookup_gap != 8))) {
+  if ((strcmp(cgpu->kernelname, "bufius") == 0) && ((cgpu->lookup_gap != 2) && (cgpu->lookup_gap != 4) && (cgpu->lookup_gap != 8))) {
     applog(LOG_WARNING, "Kernel bufius only supports lookup-gap of 2, 4 or 8 (currently %d), forcing to 2", cgpu->lookup_gap);
     cgpu->lookup_gap = 2;
   }
@@ -369,39 +367,40 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
 
   slot = cpnd = 0;
 
-  strcat(binaryfilename, name);
-  if (clState->goffset)
-    strcat(binaryfilename, "g");
-
-  sprintf(strbuf, "lg%utc%unf%u", cgpu->lookup_gap, (unsigned int)cgpu->thread_concurrency, algorithm->nfactor);
-  strcat(binaryfilename, strbuf);
-
-  sprintf(strbuf, "w%d", (int)clState->wsize);
-  strcat(binaryfilename, strbuf);
-  sprintf(strbuf, "l%d", (int)sizeof(long));
-  strcat(binaryfilename, strbuf);
-  strcat(binaryfilename, ".bin");
-
-  strcpy(build_data->binary_filename, binaryfilename);
   build_data->context = clState->context;
   build_data->device = &devices[gpu];
+
+  // Build information
+  strcpy(build_data->source_filename, filename);
+  strcpy(build_data->platform, name);
+  strcpy(build_data->sgminer_path, sgminer_path);
+  if (opt_kernel_path && *opt_kernel_path) {
+    build_data->kernel_path = opt_kernel_path;
+  }
+  else {
+    build_data->kernel_path = NULL;
+  }
+
+  build_data->work_size = clState->wsize;
+  build_data->has_bit_align = clState->hasBitAlign;
+
+  build_data->opencl_version = get_opencl_version(devices[gpu]);
+  build_data->patch_bfi = needs_bfi_patch(build_data);
+
+  strcpy(build_data->binary_filename, cgpu->kernelname);
+  strcat(build_data->binary_filename, name);
+  if (clState->goffset)
+    strcat(build_data->binary_filename, "g");
+
+  set_base_compiler_options(build_data);
+  if (algorithm->set_compile_options)
+    algorithm->set_compile_options(build_data, cgpu, algorithm);
+
+  strcat(build_data->binary_filename, ".bin");
+
+  // Load program from file or build it if it doesn't exist
   if (!(clState->program = load_opencl_binary_kernel(build_data))) {
-    applog(LOG_NOTICE, "Building binary %s", binaryfilename);
-
-    strcpy(build_data->source_filename, filename);
-    strcpy(build_data->platform, name);
-    strcpy(build_data->sgminer_path, sgminer_path);
-    if (opt_kernel_path && *opt_kernel_path)
-      build_data->kernel_path = opt_kernel_path;
-
-    build_data->work_size = clState->wsize;
-    build_data->has_bit_align = clState->hasBitAlign;
-
-    build_data->opencl_version = get_opencl_version(devices[gpu]);
-    build_data->patch_bfi = needs_bfi_patch(build_data);
-
-    set_base_compiler_options(build_data);
-    append_scrypt_compiler_options(build_data, cgpu->lookup_gap, cgpu->thread_concurrency, algorithm->nfactor);
+    applog(LOG_NOTICE, "Building binary %s", build_data->binary_filename);
 
     if (!(clState->program = build_opencl_kernel(build_data, filename)))
       return NULL;
@@ -418,6 +417,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
     }
   }
 
+  // Load kernels
   applog(LOG_NOTICE, "Initialising kernel %s with%s bitalign, %spatched BFI, nfactor %d, n %d",
          filename, clState->hasBitAlign ? "" : "out", build_data->patch_bfi ? "" : "un",
          algorithm->nfactor, algorithm->n);
@@ -489,13 +489,6 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
     applog(LOG_ERR, "Error %d: clCreateBuffer (outputBuffer)", status);
     return NULL;
   }
-
-  clState->hash_buffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, THASHBUFSIZE, NULL, &status);
-  if (status != CL_SUCCESS && !clState->hash_buffer) {
-    applog(LOG_ERR, "Error %d: clCreateBuffer (hash_buffer), decrease TC or increase LG", status);
-    return NULL;
-  }
-
 
   return clState;
 }

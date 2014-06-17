@@ -34,8 +34,6 @@
 #include "adl.h"
 #include "util.h"
 
-#include "scrypt-jane.h"  /* sj_be32enc_vect */
-
 /* TODO: cleanup externals ********************/
 
 #ifdef HAVE_CURSES
@@ -715,10 +713,11 @@ void pause_dynamic_threads(int gpu)
   struct cgpu_info *cgpu = &gpus[gpu];
   int i;
 
+  rd_lock(&mining_thr_lock);
   for (i = 1; i < cgpu->threads; i++) {
     struct thr_info *thr;
 
-    thr = get_thread(i);
+    thr = cgpu->thr[i];
     if (!thr->pause && cgpu->dynamic) {
       applog(LOG_WARNING, "Disabling extra threads due to dynamic mode.");
       applog(LOG_WARNING, "Tune dynamic intensity with --gpu-dyninterval");
@@ -728,6 +727,7 @@ void pause_dynamic_threads(int gpu)
     if (!cgpu->dynamic && cgpu->deven != DEV_DISABLED)
       cgsem_post(&thr->sem);
   }
+  rd_unlock(&mining_thr_lock);
 }
 
 #if defined(HAVE_CURSES)
@@ -800,8 +800,10 @@ retry: // TODO: refactor
     }
 #endif
     wlog("Last initialised: %s\n", cgpu->init);
+
+    rd_lock(&mining_thr_lock);
     for (i = 0; i < mining_threads; i++) {
-      thr = get_thread(i);
+      thr = mining_thr[i];
       if (thr->cgpu != cgpu)
         continue;
       get_datestamp(checkin, sizeof(checkin), &thr->last);
@@ -829,6 +831,8 @@ retry: // TODO: refactor
         wlog(" paused");
       wlog("\n");
     }
+    rd_unlock(&mining_thr_lock);
+
     wlog("\n");
   }
 
@@ -857,8 +861,9 @@ retry: // TODO: refactor
       goto retry;
     }
     gpus[selected].deven = DEV_ENABLED;
+    rd_lock(&mining_thr_lock);
     for (i = 0; i < mining_threads; ++i) {
-      thr = get_thread(i);
+      thr = mining_thr[i];
       cgpu = thr->cgpu;
       if (cgpu->drv->drv_id != DRIVER_opencl)
         continue;
@@ -872,6 +877,7 @@ retry: // TODO: refactor
 
       cgsem_post(&thr->sem);
     }
+    rd_unlock(&mining_thr_lock);
     goto retry;
   } else if (!strncasecmp(&input, "d", 1)) {
     if (selected)
@@ -1072,19 +1078,14 @@ select_cgpu:
 
   gpu = cgpu->device_id;
 
+  rd_lock(&mining_thr_lock);
   for (thr_id = 0; thr_id < mining_threads; ++thr_id) {
-    thr = get_thread(thr_id);
+    thr = mining_thr[thr_id];
     cgpu = thr->cgpu;
     if (cgpu->drv->drv_id != DRIVER_opencl)
       continue;
     if (dev_from_id(thr_id) != gpu)
       continue;
-
-    thr = get_thread(thr_id);
-    if (!thr) {
-      applog(LOG_WARNING, "No reference to thread %d exists", thr_id);
-      continue;
-    }
 
     thr->rolling = thr->cgpu->rolling = 0;
     /* Reports the last time we tried to revive a sick GPU */
@@ -1096,11 +1097,13 @@ select_cgpu:
     } else
       applog(LOG_WARNING, "Thread %d no longer exists", thr_id);
   }
+  rd_unlock(&mining_thr_lock);
 
+  rd_lock(&mining_thr_lock);
   for (thr_id = 0; thr_id < mining_threads; ++thr_id) {
     int virtual_gpu;
 
-    thr = get_thread(thr_id);
+    thr = mining_thr[thr_id];
     cgpu = thr->cgpu;
     if (cgpu->drv->drv_id != DRIVER_opencl)
       continue;
@@ -1132,12 +1135,14 @@ select_cgpu:
     }
     applog(LOG_WARNING, "Thread %d restarted", thr_id);
   }
+  rd_unlock(&mining_thr_lock);
 
   cgtime(&now);
   get_datestamp(cgpu->init, sizeof(cgpu->init), &now);
 
+  rd_lock(&mining_thr_lock);
   for (thr_id = 0; thr_id < mining_threads; ++thr_id) {
-    thr = get_thread(thr_id);
+    thr = mining_thr[thr_id];
     cgpu = thr->cgpu;
     if (cgpu->drv->drv_id != DRIVER_opencl)
       continue;
@@ -1146,6 +1151,7 @@ select_cgpu:
 
     cgsem_post(&thr->sem);
   }
+  rd_unlock(&mining_thr_lock);
 
   goto select_cgpu;
 out:
@@ -1249,7 +1255,6 @@ static bool opencl_thread_prepare(struct thr_info *thr)
   char name[256];
   struct timeval now;
   struct cgpu_info *cgpu = thr->cgpu;
-  struct opencl_thread_data *thrdata = (struct opencl_thread_data *)thr->cgpu_data;
   int gpu = cgpu->device_id;
   int virtual_gpu = cgpu->virtual_gpu;
   int i = thr->id;
@@ -1265,8 +1270,6 @@ static bool opencl_thread_prepare(struct thr_info *thr)
 
   strcpy(name, "");
   applog(LOG_INFO, "Init GPU thread %i GPU %i virtual GPU %i", i, gpu, virtual_gpu);
-  if (thrdata)
-    thrdata->queue_kernel_parameters = cgpu->algorithm.queue_kernel;
 
   clStates[i] = initCl(virtual_gpu, name, sizeof(name), &cgpu->algorithm);
   if (!clStates[i]) {
@@ -1355,14 +1358,6 @@ static bool opencl_prepare_work(struct thr_info __maybe_unused *thr, struct work
 }
 
 extern int opt_dynamic_interval;
-
-#define CL_ENQUEUE_KERNEL(KL, GWO) \
-  status = clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel_##KL, 1, GWO, globalThreads, localThreads, 0, NULL, NULL); \
-  if (unlikely(status != CL_SUCCESS)) { \
-    applog(LOG_ERR, "Error %d: Enqueueing kernel #KL onto command queue. (clEnqueueNDRangeKernel)", status); \
-    return -1; \
-  }
-
 
 static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
         int64_t __maybe_unused max_nonce)
@@ -1466,9 +1461,6 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 
 // Cleanup OpenCL memory on the GPU
 // Note: This function is not thread-safe (clStates modification not atomic)
-#define CL_RELEASE_KERNEL(name) \
-  if (clState->name) clReleaseKernel(clState->name)
-
 static void opencl_thread_shutdown(struct thr_info *thr)
 {
   const int thr_id = thr->id;
@@ -1481,7 +1473,7 @@ static void opencl_thread_shutdown(struct thr_info *thr)
     clReleaseMemObject(clState->outputBuffer);
     clReleaseMemObject(clState->CLbuffer0);
     if (clState->padbuffer8)
-    clReleaseMemObject(clState->padbuffer8);
+      clReleaseMemObject(clState->padbuffer8);
     clReleaseKernel(clState->kernel);
         for (i = 0; i < clState->n_extra_kernels; i++)
             clReleaseKernel(clState->extra_kernels[i]);
@@ -1492,37 +1484,40 @@ static void opencl_thread_shutdown(struct thr_info *thr)
       free(clState->extra_kernels);
     free(clState);
   }
+  free(((struct opencl_thread_data *)thr->cgpu_data)->res);
+  free(thr->cgpu_data);
+  thr->cgpu_data = NULL;
 }
 
 struct device_drv opencl_drv = {
   /*.drv_id = */      DRIVER_opencl,
-  /*.dname = */      "opencl",
+  /*.dname = */     "opencl",
   /*.name = */      "GPU",
   /*.drv_detect = */    opencl_detect,
-  /*.reinit_device = */    reinit_opencl_device,
+  /*.reinit_device = */   reinit_opencl_device,
 #ifdef HAVE_ADL
-  /*.get_statline_before = */  get_opencl_statline_before,
+  /*.get_statline_before = */ get_opencl_statline_before,
 #else
           NULL,
 #endif
   /*.get_statline = */    get_opencl_statline,
   /*.api_data = */    NULL,
-  /*.get_stats = */    NULL,
-  /*.identify_device = */    NULL,
+  /*.get_stats = */   NULL,
+  /*.identify_device = */   NULL,
   /*.set_device = */    NULL,
 
   /*.thread_prepare = */    opencl_thread_prepare,
   /*.can_limit_work = */    NULL,
-  /*.thread_init = */    opencl_thread_init,
+  /*.thread_init = */   opencl_thread_init,
   /*.prepare_work = */    opencl_prepare_work,
-  /*.hash_work = */    NULL,
+  /*.hash_work = */   NULL,
   /*.scanhash = */    opencl_scanhash,
   /*.scanwork = */    NULL,
   /*.queue_full = */    NULL,
   /*.flush_work = */    NULL,
-  /*.update_work = */    NULL,
+  /*.update_work = */   NULL,
   /*.hw_error = */    NULL,
-  /*.thread_shutdown = */    opencl_thread_shutdown,
+  /*.thread_shutdown = */   opencl_thread_shutdown,
   /*.thread_enable =*/    NULL,
           false,
           0,

@@ -5,34 +5,38 @@ static char *file_contents(const char *filename, int *length)
 {
   char *fullpath = (char *)alloca(PATH_MAX);
   void *buffer;
-  FILE *f;
+  FILE *f = NULL;
 
-  /* Try in the optional kernel path first, defaults to PREFIX */
-  strcpy(fullpath, opt_kernel_path);
-  strcat(fullpath, filename);
-  f = fopen(fullpath, "rb");
+  if (opt_kernel_path && *opt_kernel_path) {
+    /* Try in the optional kernel path first, defaults to PREFIX */
+    snprintf(fullpath, PATH_MAX, "%s/%s", opt_kernel_path, filename);
+    applog(LOG_DEBUG, "Trying to open %s...", fullpath);
+    f = fopen(fullpath, "rb");
+  }
   if (!f) {
     /* Then try from the path sgminer was called */
-    strcpy(fullpath, sgminer_path);
-    strcat(fullpath, filename);
+    snprintf(fullpath, PATH_MAX, "%s/%s", sgminer_path, filename);
+    applog(LOG_DEBUG, "Trying to open %s...", fullpath);
     f = fopen(fullpath, "rb");
   }
   if (!f) {
     /* Then from `pwd`/kernel/ */
-    strcpy(fullpath, sgminer_path);
-    strcat(fullpath, "kernel/");
-    strcat(fullpath, filename);
+    snprintf(fullpath, PATH_MAX, "%s/kernel/%s", sgminer_path, filename);
+    applog(LOG_DEBUG, "Trying to open %s...", fullpath);
     f = fopen(fullpath, "rb");
   }
   /* Finally try opening it directly */
-  if (!f)
+  if (!f) {
+    applog(LOG_DEBUG, "Trying to open %s...", fullpath);
     f = fopen(filename, "rb");
+  }
 
   if (!f) {
-    applog(LOG_ERR, "Unable to open %s or %s for reading",
-           filename, fullpath);
+    applog(LOG_ERR, "Unable to open %s for reading!", filename);
     return NULL;
   }
+
+  applog(LOG_DEBUG, "Using %s", fullpath);
 
   fseek(f, 0, SEEK_END);
   *length = ftell(f);
@@ -48,17 +52,20 @@ static char *file_contents(const char *filename, int *length)
 
 void set_base_compiler_options(build_kernel_data *data)
 {
-  sprintf(data->compiler_options, "-I \"%s\" -I \"%skernel\" -I \".\" -D WORKSIZE=%d",
+  char buf[255];
+  sprintf(data->compiler_options, "-I \"%s\" -I \"%s/kernel\" -I \".\" -D WORKSIZE=%d",
       data->sgminer_path, data->sgminer_path, (int)data->work_size);
-
   applog(LOG_DEBUG, "Setting worksize to %d", (int)(data->work_size));
+
+  sprintf(buf, "w%dl%d", (int)data->work_size, (int)sizeof(long));
+  strcat(data->binary_filename, buf);
 
   if (data->has_bit_align) {
     strcat(data->compiler_options, " -D BITALIGN");
     applog(LOG_DEBUG, "cl_amd_media_ops found, setting BITALIGN");
   } else
     applog(LOG_DEBUG, "cl_amd_media_ops not found, will not set BITALIGN");
-
+  
   if (data->kernel_path) {
     strcat(data->compiler_options, " -I \"");
     strcat(data->compiler_options, data->kernel_path);
@@ -97,16 +104,6 @@ bool needs_bfi_patch(build_kernel_data *data)
     return false;
 }
 
-// TODO: move away, specific
-void append_scrypt_compiler_options(build_kernel_data *data, int lookup_gap, unsigned int thread_concurrency, unsigned int nfactor)
-{
-  char buf[255];
-  sprintf(buf, " -D LOOKUP_GAP=%d -D CONCURRENT_THREADS=%d -D NFACTOR=%d",
-      lookup_gap, thread_concurrency, nfactor);
-
-  strcat(data->compiler_options, buf);
-}
-
 cl_program build_opencl_kernel(build_kernel_data *data, const char *filename)
 {
   int pl;
@@ -136,7 +133,7 @@ cl_program build_opencl_kernel(build_kernel_data *data, const char *filename)
     char *sz_log = (char *)malloc(log_size + 1);
     status = clGetProgramBuildInfo(program, *data->device, CL_PROGRAM_BUILD_LOG, log_size, sz_log, NULL);
     sz_log[log_size] = '\0';
-    applog(LOG_ERR, "%s", sz_log);
+    applogsiz(LOG_ERR, log_size, "%s", sz_log);
     free(sz_log);
     goto out;
   }

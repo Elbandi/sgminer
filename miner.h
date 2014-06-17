@@ -116,14 +116,14 @@ static inline int fsync (int fd)
   #endif
  #ifndef timeradd
  # define timeradd(a, b, result)            \
-   do {                    \
-    (result)->tv_sec = (a)->tv_sec + (b)->tv_sec;        \
+   do {                   \
+    (result)->tv_sec = (a)->tv_sec + (b)->tv_sec;       \
     (result)->tv_usec = (a)->tv_usec + (b)->tv_usec;        \
-    if ((result)->tv_usec >= 1000000)            \
-      {                    \
-  ++(result)->tv_sec;              \
-  (result)->tv_usec -= 1000000;            \
-      }                    \
+    if ((result)->tv_usec >= 1000000)           \
+      {                   \
+  ++(result)->tv_sec;             \
+  (result)->tv_usec -= 1000000;           \
+      }                   \
    } while (0)
  #endif
 #endif
@@ -159,17 +159,17 @@ static inline int fsync (int fd)
 #define bswap_32 OSSwapInt32
 #define bswap_64 OSSwapInt64
 #else
-#define  bswap_16(value)  \
-   ((((value) & 0xff) << 8) | ((value) >> 8))
+#define bswap_16(value)  \
+  ((((value) & 0xff) << 8) | ((value) >> 8))
 
-#define  bswap_32(value)  \
-   (((uint32_t)bswap_16((uint16_t)((value) & 0xffff)) << 16) | \
-   (uint32_t)bswap_16((uint16_t)((value) >> 16)))
+#define bswap_32(value) \
+  (((uint32_t)bswap_16((uint16_t)((value) & 0xffff)) << 16) | \
+  (uint32_t)bswap_16((uint16_t)((value) >> 16)))
 
-#define  bswap_64(value)  \
-   (((uint64_t)bswap_32((uint32_t)((value) & 0xffffffff)) \
-       << 32) | \
-   (uint64_t)bswap_32((uint32_t)((value) >> 32)))
+#define bswap_64(value) \
+  (((uint64_t)bswap_32((uint32_t)((value) & 0xffffffff)) \
+      << 32) | \
+  (uint64_t)bswap_32((uint32_t)((value) >> 32)))
 #endif
 #endif /* !defined(__GLXBYTEORDER_H__) */
 
@@ -234,10 +234,10 @@ static inline int fsync (int fd)
 #endif
 
 #ifndef MIN
-#define MIN(x, y)  ((x) > (y) ? (y) : (x))
+#define MIN(x, y) ((x) > (y) ? (y) : (x))
 #endif
 #ifndef MAX
-#define MAX(x, y)  ((x) > (y) ? (x) : (y))
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
 #endif
 
 /* Adding a device here will update all macros in the code that use
@@ -412,17 +412,17 @@ enum dev_reason {
   REASON_DEV_THROTTLE,
 };
 
-#define REASON_NONE      "None"
-#define REASON_THREAD_FAIL_INIT_STR  "Thread failed to init"
-#define REASON_THREAD_ZERO_HASH_STR  "Thread got zero hashes"
+#define REASON_NONE     "None"
+#define REASON_THREAD_FAIL_INIT_STR "Thread failed to init"
+#define REASON_THREAD_ZERO_HASH_STR "Thread got zero hashes"
 #define REASON_THREAD_FAIL_QUEUE_STR  "Thread failed to queue work"
-#define REASON_DEV_SICK_IDLE_60_STR  "Device idle for 60s"
+#define REASON_DEV_SICK_IDLE_60_STR "Device idle for 60s"
 #define REASON_DEV_DEAD_IDLE_600_STR  "Device dead - idle for 600s"
 #define REASON_DEV_NOSTART_STR    "Device failed to start"
 #define REASON_DEV_OVER_HEAT_STR  "Device over heated"
-#define REASON_DEV_THERMAL_CUTOFF_STR  "Device reached thermal cutoff"
+#define REASON_DEV_THERMAL_CUTOFF_STR "Device reached thermal cutoff"
 #define REASON_DEV_COMMS_ERROR_STR  "Device comms error"
-#define REASON_DEV_THROTTLE_STR    "Device throttle"
+#define REASON_DEV_THROTTLE_STR   "Device throttle"
 #define REASON_UNKNOWN_STR    "Unknown reason - code bug"
 
 #define MIN_SEC_UNSET 99999999
@@ -564,17 +564,17 @@ struct thread_q {
 
   bool frozen;
 
-  pthread_mutex_t    mutex;
+  pthread_mutex_t   mutex;
   pthread_cond_t    cond;
 };
 
 struct thr_info {
-  int    id;
-  int    device_thread;
+  int   id;
+  int   device_thread;
 
-  pthread_t  pth;
-  cgsem_t    sem;
-  struct thread_q  *q;
+  pthread_t pth;
+  cgsem_t   sem;
+  struct thread_q *q;
   struct cgpu_info *cgpu;
   void *cgpu_data;
   struct timeval last;
@@ -999,6 +999,7 @@ extern cgsem_t usb_resource_sem;
 extern int swork_id;
 extern int opt_tcp_keepalive;
 extern bool opt_incognito;
+extern int opt_hamsi_expand_big;
 
 #if LOCK_TRACKING
 extern pthread_mutex_t lockstat_lock;
@@ -1008,7 +1009,7 @@ extern pthread_rwlock_t netacc_lock;
 
 extern const uint32_t sha256_init_state[];
 #ifdef HAVE_LIBCURL
-extern json_t *json_rpc_call(CURL *curl, const char *url, const char *userpass,
+extern json_t *json_rpc_call(CURL *curl, char *curl_err_str, const char *url, const char *userpass,
            const char *rpc_req, bool, bool, int *,
            struct pool *pool, bool);
 #endif
@@ -1105,6 +1106,7 @@ extern struct cgpu_info gpus[MAX_GPUDEVICES];
 extern double total_secs;
 extern int mining_threads;
 extern int total_devices;
+extern int zombie_devs;
 extern struct cgpu_info **devices;
 extern int total_pools;
 extern struct pool **pools;
@@ -1159,6 +1161,7 @@ typedef struct _dev_blk_ctx {
 
 struct curl_ent {
   CURL *curl;
+  char curl_err_str[CURL_ERROR_SIZE];
   struct list_head node;
   struct timeval tv;
 };
@@ -1335,36 +1338,36 @@ struct pool {
 #define GETWORK_MODE_GBT 'G'
 
 struct work {
-  unsigned char  data[128];
-  unsigned char  midstate[32];
-  unsigned char  target[32];
-  unsigned char  hash[32];
+  unsigned char data[128];
+  unsigned char midstate[32];
+  unsigned char target[32];
+  unsigned char hash[32];
 
-  unsigned char  device_target[32];
+  unsigned char device_target[32];
   double    device_diff;
   double    share_diff;
 
-  int    rolls;
-  int    drv_rolllimit; /* How much the driver can roll ntime */
+  int   rolls;
+  int   drv_rolllimit; /* How much the driver can roll ntime */
 
-  dev_blk_ctx  blk;
+  dev_blk_ctx blk;
 
-  struct thr_info  *thr;
-  int    thr_id;
-  struct pool  *pool;
+  struct thr_info *thr;
+  int   thr_id;
+  struct pool *pool;
   struct timeval  tv_staged;
 
   bool    mined;
   bool    clone;
   bool    cloned;
-  int    rolltime;
+  int   rolltime;
   bool    longpoll;
   bool    stale;
   bool    mandatory;
   bool    block;
 
   bool    stratum;
-  char     *job_id;
+  char    *job_id;
   uint64_t  nonce2;
   size_t    nonce2_len;
   char    *ntime;
@@ -1373,16 +1376,16 @@ struct work {
 
   bool    gbt;
   char    *coinbase;
-  int    gbt_txns;
+  int   gbt_txns;
 
   unsigned int  work_block;
-  int    id;
+  int   id;
   UT_hash_handle  hh;
 
   double    work_difficulty;
 
   // Allow devices to identify work if multiple sub-devices
-  int    subid;
+  int   subid;
   // Allow devices to flag work for their own purposes
   bool    devflag;
   // Allow devices to timestamp work for their own purposes
@@ -1444,7 +1447,6 @@ extern void clean_work(struct work *work);
 extern void free_work(struct work *work);
 extern struct work *copy_work_noffset(struct work *base_work, int noffset);
 #define copy_work(work_in) copy_work_noffset(work_in, 0)
-extern struct thr_info *get_thread(int thr_id);
 extern struct cgpu_info *get_devices(int id);
 
 enum api_data_type {

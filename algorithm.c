@@ -8,12 +8,12 @@
  */
 
 #include "algorithm.h"
-#include "scrypt.h"
-#include "scrypt-jane.h"
-#include "sha2.h"
+#include "sph/sph_sha2.h"
 #include "ocl.h"
+#include "ocl/build_kernel.h"
 
 #include "algorithm/scrypt.h"
+#include "algorithm/scrypt-jane.h"
 #include "algorithm/animecoin.h"
 #include "algorithm/inkcoin.h"
 #include "algorithm/quarkcoin.h"
@@ -31,13 +31,25 @@
 
 #include <inttypes.h>
 #include <string.h>
+void sha256(const unsigned char *message, unsigned int len, unsigned char *digest)
+{
+  sph_sha256_context ctx_sha2;
+
+  sph_sha256_init(&ctx_sha2);
+  sph_sha256(&ctx_sha2, message, len);
+  sph_sha256_close(&ctx_sha2, (void*)digest);
+}
 
 void gen_hash(const unsigned char *data, unsigned int len, unsigned char *hash)
 {
   unsigned char hash1[32];
+  sph_sha256_context ctx_sha2;
 
-  sha256(data, len, hash1);
-  sha256(hash1, 32, hash);
+  sph_sha256_init(&ctx_sha2);
+  sph_sha256(&ctx_sha2, data, len);
+  sph_sha256_close(&ctx_sha2, hash1);
+  sph_sha256(&ctx_sha2, hash1, 32);
+  sph_sha256_close(&ctx_sha2, hash);
 }
 
 #define CL_SET_BLKARG(blkvar) status |= clSetKernelArg(*kernel, num++, sizeof(uint), (void *)&blk->blkvar)
@@ -48,6 +60,28 @@ void gen_hash(const unsigned char *data, unsigned int len, unsigned char *hash)
 #define CL_NEXTKERNEL_SET_ARG(var) kernel++; status |= clSetKernelArg(*kernel, num++, sizeof(var), (void *)&var)
 #define CL_NEXTKERNEL_SET_ARG_0(var) kernel++; status |= clSetKernelArg(*kernel, 0, sizeof(var), (void *)&var)
 #define CL_NEXTKERNEL_SET_ARG_N(n,var) kernel++; status |= clSetKernelArg(*kernel, n, sizeof(var), (void *)&var)
+
+static void append_scrypt_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
+{
+  char buf[255];
+  sprintf(buf, " -D LOOKUP_GAP=%d -D CONCURRENT_THREADS=%u -D NFACTOR=%d",
+          cgpu->lookup_gap, (unsigned int)cgpu->thread_concurrency, algorithm->nfactor);
+  strcat(data->compiler_options, buf);
+
+  sprintf(buf, "lg%utc%unf%u", cgpu->lookup_gap, (unsigned int)cgpu->thread_concurrency, algorithm->nfactor);
+  strcat(data->binary_filename, buf);
+}
+
+static void append_hamsi_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
+{
+  char buf[255];
+  sprintf(buf, " -D SPH_HAMSI_EXPAND_BIG=%d",
+          opt_hamsi_expand_big);
+  strcat(data->compiler_options, buf);
+
+  sprintf(buf, "big%u", (unsigned int)opt_hamsi_expand_big);
+  strcat(data->binary_filename, buf);
+}
 
 static cl_int queue_scrypt_kernel(struct __clState *clState, struct _dev_blk_ctx *blk, __maybe_unused cl_uint threads)
 {
@@ -196,7 +230,6 @@ static cl_int queue_marucoin_mod_kernel(struct __clState *clState, struct _dev_b
   return status;
 }
 
-
 static cl_int queue_marucoin_mod_old_kernel(struct __clState *clState, struct _dev_blk_ctx *blk, __maybe_unused cl_uint threads)
 {
   cl_kernel *kernel;
@@ -260,12 +293,13 @@ typedef struct _algorithm_settings_t {
   void     (*regenhash)(struct work *);
   cl_int   (*queue_kernel)(struct __clState *, struct _dev_blk_ctx *, cl_uint);
   void     (*gen_hash)(const unsigned char *, unsigned int, unsigned char *);
+  void     (*set_compile_options)(build_kernel_data *, struct cgpu_info *, algorithm_t *);
 } algorithm_settings_t;
 
 static algorithm_settings_t algos[] = {
   // kernels starting from this will have difficulty calculated by using litecoin algorithm
 #define A_SCRYPT(a, b, c, d) \
-  { a, b, c, 1, 65536, 65536, 0, 0, 0xFF, 0x0000ffff00000000ULL, 0xFFFFFFFFULL, 0x0000ffffUL, 0, -1, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, d, queue_scrypt_kernel, gen_hash}
+  { a, b, c, 1, 65536, 65536, 0, 0, 0xFF, 0x0000ffff00000000ULL, 0xFFFFFFFFULL, 0x0000ffffUL, 0, -1, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, d, queue_scrypt_kernel, gen_hash, append_scrypt_compiler_options}
   A_SCRYPT( "scrypt", "ckolivas", 10, scrypt_regenhash ),
   A_SCRYPT( "nscrypt", "ckolivas", 11, scrypt_regenhash ),
   A_SCRYPT( "scrypt-jane", "scrypt-jane", 10, sj_scrypt_regenhash),
@@ -273,7 +307,7 @@ static algorithm_settings_t algos[] = {
 
   // kernels starting from this will have difficulty calculated by using quarkcoin algorithm
 #define A_QUARK(a, b) \
-  { a, a, 0, 256, 256, 256, 0, 0, 0xFF, 0x000000ffff000000ULL, 0xFFFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, gen_hash}
+  { a, a, 0, 256, 256, 256, 0, 0, 0xFF, 0x000000ffff000000ULL, 0xFFFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, gen_hash, NULL}
   A_QUARK( "quarkcoin", quarkcoin_regenhash),
   A_QUARK( "qubitcoin", qubitcoin_regenhash),
   A_QUARK( "animecoin", animecoin_regenhash),
@@ -281,39 +315,40 @@ static algorithm_settings_t algos[] = {
 #undef A_QUARK
 
   // kernels starting from this will have difficulty calculated by using bitcoin algorithm
-#define A_DARK(a, b) \
-  { a, a, 0, 1, 1, 1, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, gen_hash}
-  A_DARK( "darkcoin",           darkcoin_regenhash),
-  A_DARK( "inkcoin",            inkcoin_regenhash),
-  A_DARK( "myriadcoin-groestl", myriadcoin_groestl_regenhash),
-  A_DARK( "marucoin",           marucoin_regenhash),
+#define A_DARK(a, b, c) \
+  { a, a, 0, 1, 1, 1, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, gen_hash, c}
+  A_DARK( "darkcoin",           darkcoin_regenhash, NULL),
+  A_DARK( "inkcoin",            inkcoin_regenhash, NULL),
+  A_DARK( "myriadcoin-groestl", myriadcoin_groestl_regenhash, NULL),
+  A_DARK( "marucoin",           marucoin_regenhash, append_hamsi_compiler_options),
 #undef A_DARK
 
 #define A_DARK_MOD(a, b, c, d, e, f, g, h) \
-  { a, a, 0, 1, b, 1, c,  d, e, 0x00000000ffff0000ULL, 0xFFFFULL, f, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, g, h, sha256}
+  { a, a, 0, 1, b, 1, c,  d, e, 0x00000000ffff0000ULL, 0xFFFFULL, f, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, g, h, sha256, NULL}
   A_DARK_MOD( "twecoin",   1, 0,  0, 0xFF, 0x0000ffffUL, twecoin_regenhash, queue_sph_kernel),
   A_DARK_MOD( "maxcoin", 256, 4, 15, 0x0F, 0x000000ffUL, maxcoin_regenhash, queue_maxcoin_kernel),
 #undef A_DARK_MOD
 
-#define A_DARK_MOD(a, b, c, d) \
-  { a, a, 0, 1, 1, 1, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, b, 8 * 16 * 4194304, 0, c, d, gen_hash}
-  A_DARK_MOD( "darkcoin-mod", 10, darkcoin_regenhash, queue_darkcoin_mod_kernel),
-  A_DARK_MOD( "marucoin-mod", 12, marucoin_regenhash, queue_marucoin_mod_kernel),
-  A_DARK_MOD( "marucoin-modold", 10, marucoin_regenhash, queue_marucoin_mod_old_kernel),
+#define A_DARK_MOD(a, b, c, d, e) \
+  { a, a, 0, 1, 1, 1, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, b, 8 * 16 * 4194304, 0, c, d, gen_hash, e}
+  A_DARK_MOD( "darkcoin-mod", 10, darkcoin_regenhash, queue_darkcoin_mod_kernel, NULL),
+  A_DARK_MOD( "marucoin-mod", 12, marucoin_regenhash, queue_marucoin_mod_kernel, append_hamsi_compiler_options),
+  A_DARK_MOD( "marucoin-modold", 10, marucoin_regenhash, queue_marucoin_mod_old_kernel, append_hamsi_compiler_options),
 #undef A_DARK_MOD
 
   // kernels starting from this will have difficulty calculated by using fuguecoin algorithm
 #define A_FUGUE(a, b) \
-  { a, a, 0, 1, 256, 256, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, sha256}
+  { a, a, 0, 1, 256, 256, 0, 0, 0xFF, 0x00000000ffff0000ULL, 0xFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, b, queue_sph_kernel, sha256, NULL}
   A_FUGUE( "fuguecoin",   fuguecoin_regenhash),
   A_FUGUE( "groestlcoin", groestlcoin_regenhash),
 #undef A_FUGUE
 
   // Terminator (do not remove)
-  { NULL, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL}
+  { NULL, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL}
 };
 
-void set_algorithm(algorithm_t* dest, const char* algo) {
+void set_algorithm(algorithm_t* dest, const char* algo)
+{
   algorithm_settings_t* src;
 
   // Find algorithm settings and copy
@@ -337,6 +372,7 @@ void set_algorithm(algorithm_t* dest, const char* algo) {
       dest->regenhash = src->regenhash;
       dest->queue_kernel = src->queue_kernel;
       dest->gen_hash = src->gen_hash;
+      dest->set_compile_options = src->set_compile_options;
       // Doesn't matter for non-scrypt algorithms
       set_algorithm_nfactor(dest, dest->nfactor);
       break;
@@ -350,12 +386,14 @@ void set_algorithm(algorithm_t* dest, const char* algo) {
   }
 }
 
-void set_algorithm_nfactor(algorithm_t* algo, const uint8_t nfactor) {
+void set_algorithm_nfactor(algorithm_t* algo, const uint8_t nfactor)
+{
   algo->nfactor = nfactor;
   algo->n = (1 << nfactor);
 }
 
-bool cmp_algorithm(algorithm_t* algo1, algorithm_t* algo2) {
+bool cmp_algorithm(algorithm_t* algo1, algorithm_t* algo2)
+{
   return (strcmp(algo1->name, algo2->name) == 0) &&
-    (algo1->nfactor == algo2->nfactor);
+         (algo1->nfactor == algo2->nfactor);
 }

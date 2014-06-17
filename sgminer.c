@@ -51,7 +51,7 @@
 char *curly = ":D";
 #endif
 #include <libgen.h>
-#include <sha2.h>
+#include "sph/sph_sha2.h"
 
 #include "compat.h"
 #include "miner.h"
@@ -62,9 +62,6 @@ char *curly = ":D";
 #include "bench_block.h"
 
 #include "algorithm.h"
-#include "scrypt.h"
-#include "scrypt-jane.h"
-#include "darkcoin.h"
 #ifdef USE_USBUTILS
 #include "usbutils.h"
 #endif
@@ -119,6 +116,7 @@ unsigned int sj_startTime = 1388361600;
 int nDevs;
 int opt_dynamic_interval = 7;
 int opt_g_threads = -1;
+int opt_hamsi_expand_big = 4;
 bool opt_restart = true;
 bool opt_nogpu;
 bool opt_noasic;
@@ -129,6 +127,7 @@ static int opt_devs_enabled;
 static bool opt_display_devs;
 static bool opt_removedisabled;
 int total_devices;
+int zombie_devs;
 static int most_devices;
 struct cgpu_info **devices;
 bool have_opencl;
@@ -146,6 +145,7 @@ bool opt_fail_only;
 int opt_fail_switch_delay = 60;
 static bool opt_fix_protocol;
 static bool opt_lowmem;
+static bool opt_morenotices;
 bool opt_autofan;
 bool opt_autoengine;
 bool opt_noadl;
@@ -444,27 +444,15 @@ static void applog_and_exit(const char *fmt, ...)
 static pthread_mutex_t sharelog_lock;
 static FILE *sharelog_file = NULL;
 
-static struct thr_info *__get_thread(int thr_id)
-{
-  return mining_thr[thr_id];
-}
-
-struct thr_info *get_thread(int thr_id)
-{
-  struct thr_info *thr;
-
-  rd_lock(&mining_thr_lock);
-  thr = __get_thread(thr_id);
-  rd_unlock(&mining_thr_lock);
-
-  return thr;
-}
-
 static struct cgpu_info *get_thr_cgpu(int thr_id)
 {
-  struct thr_info *thr = get_thread(thr_id);
+  struct thr_info *thr = NULL;
+  rd_lock(&mining_thr_lock);
+  if (thr_id < mining_threads)
+    thr = mining_thr[thr_id];
+  rd_unlock(&mining_thr_lock);
 
-  return thr->cgpu;
+  return thr ? thr->cgpu : NULL;
 }
 
 struct cgpu_info *get_devices(int id)
@@ -1411,11 +1399,17 @@ static struct opt_table opt_config_table[] = {
   OPT_WITH_ARG("--lookup-gap",
       set_lookup_gap, NULL, NULL,
       "Set GPU lookup gap for scrypt mining, comma separated"),
+  OPT_WITH_ARG("--hamsi-expand-big",
+      set_int_1_to_10, opt_show_intval, &opt_hamsi_expand_big,
+      "Set SPH_HAMSI_EXPAND_BIG for X13 algorithms (1 or 4 are common)"),
 #ifdef HAVE_CURSES
   OPT_WITHOUT_ARG("--incognito",
       opt_set_bool, &opt_incognito,
       "Do not display user name in status window"),
 #endif
+  OPT_WITHOUT_ARG("--more-notices",
+      opt_set_bool, &opt_morenotices,
+      "Shows work restart and new block notices, hidden by default"),
   OPT_WITH_ARG("--intensity|-I",
       set_intensity, NULL, NULL,
       "Intensity of GPU scanning (d or " MIN_INTENSITY_STR
@@ -1896,12 +1890,12 @@ static void calc_midstate(struct work *work)
 {
   unsigned char data[64];
   uint32_t *data32 = (uint32_t *)data;
-  sha256_ctx ctx;
+  sph_sha256_context ctx;
 
   flip64(data32, work->data);
-  sha256_init(&ctx);
-  sha256_update(&ctx, data, 64);
-  memcpy(work->midstate, ctx.h, 32);
+  sph_sha256_init(&ctx);
+  sph_sha256(&ctx, data, 64);
+  memcpy(work->midstate, ctx.val, 32);
   endian_flip32(work->midstate, work->midstate);
 }
 
@@ -2029,12 +2023,13 @@ static void update_gbt(struct pool *pool)
   int rolltime;
   json_t *val;
   CURL *curl;
+  char curl_err_str[CURL_ERROR_SIZE];
 
   curl = curl_easy_init();
   if (unlikely(!curl))
     quit (1, "CURL initialisation failed in update_gbt");
 
-  val = json_rpc_call(curl, pool->rpc_url, pool->rpc_userpass,
+  val = json_rpc_call(curl, curl_err_str, pool->rpc_url, pool->rpc_userpass,
           pool->rpc_req, true, false, &rolltime, pool, false);
 
   if (val) {
@@ -2283,7 +2278,7 @@ out:
 #else /* HAVE_LIBCURL */
 /* Always true with stratum */
 #define pool_localgen(pool) (true)
-#define json_rpc_call(curl, url, userpass, rpc_req, probe, longpoll, rolltime, pool, share) (NULL)
+#define json_rpc_call(curl, curl_err_str, url, userpass, rpc_req, probe, longpoll, rolltime, pool, share) (NULL)
 #define work_decode(pool, work, val) (false)
 #define gen_gbt_work(pool, work) {}
 #endif /* HAVE_LIBCURL */
@@ -2869,15 +2864,10 @@ share_result(json_t *val, json_t *res, json_t *err, const struct work *work,
 
     applog(LOG_DEBUG, "PROOF OF WORK RESULT: false (booooo)");
     if (!QUIET) {
-      char where[20];
       char disposition[36] = "reject";
       char reason[32];
 
       strcpy(reason, "");
-      if (total_pools > 1)
-        snprintf(where, sizeof(where), "%s", get_pool_name(pool));
-      else
-        strcpy(where, "");
 
       if (!work->gbt)
         res = json_object_get(val, "reject-reason");
@@ -2903,7 +2893,12 @@ share_result(json_t *val, json_t *res, json_t *err, const struct work *work,
       }
 
       applog(LOG_NOTICE, "Rejected %s %s %d %s%s %s%s",
-             hashshow, cgpu->drv->name, cgpu->device_id, where, reason, resubmit ? "(resubmit)" : "", worktime);
+             hashshow, 
+             cgpu->drv->name, 
+             cgpu->device_id, 
+             (total_pools > 1) ? get_pool_name(pool) : "", 
+             reason, resubmit ? "(resubmit)" : "", 
+             worktime);
       sharelog(disposition, work);
     }
 
@@ -2975,7 +2970,7 @@ static void print_status(int thr_id)
     text_print_status(thr_id);
 }
 
-static bool submit_upstream_work(struct work *work, CURL *curl, bool resubmit)
+static bool submit_upstream_work(struct work *work, CURL *curl, char *curl_err_str, bool resubmit)
 {
   char *hexstr = NULL;
   json_t *val, *res, *err;
@@ -3044,7 +3039,7 @@ static bool submit_upstream_work(struct work *work, CURL *curl, bool resubmit)
 
   cgtime(&tv_submit);
   /* issue JSON-RPC request */
-  val = json_rpc_call(curl, pool->rpc_url, pool->rpc_userpass, s, false, false, &rolltime, pool, true);
+  val = json_rpc_call(curl, curl_err_str, pool->rpc_url, pool->rpc_userpass, s, false, false, &rolltime, pool, true);
   cgtime(&tv_submit_reply);
   free(s);
 
@@ -3146,7 +3141,7 @@ out:
   return rc;
 }
 
-static bool get_upstream_work(struct work *work, CURL *curl)
+static bool get_upstream_work(struct work *work, CURL *curl, char *curl_err_str)
 {
   struct pool *pool = work->pool;
   struct sgminer_pool_stats *pool_stats = &(pool->sgminer_pool_stats);
@@ -3161,7 +3156,7 @@ static bool get_upstream_work(struct work *work, CURL *curl)
 
   cgtime(&work->tv_getwork);
 
-  val = json_rpc_call(curl, url, pool->rpc_userpass, pool->rpc_req, false,
+  val = json_rpc_call(curl, curl_err_str, url, pool->rpc_userpass, pool->rpc_req, false,
           false, &work->rolltime, pool, false);
   pool_stats->getwork_attempts++;
 
@@ -3468,10 +3463,11 @@ static void kill_mining(void)
 
   forcelog(LOG_DEBUG, "Killing off mining threads");
   /* Kill the mining threads*/
+  rd_lock(&mining_thr_lock);
   for (i = 0; i < mining_threads; i++) {
     pthread_t *pth = NULL;
 
-    thr = get_thread(i);
+    thr = mining_thr[i];
     if (thr && PTH(thr) != 0L)
       pth = &thr->pth;
     thr_info_cancel(thr);
@@ -3483,6 +3479,7 @@ static void kill_mining(void)
       pthread_join(*pth, NULL);
 #endif
   }
+  rd_unlock(&mining_thr_lock);
 }
 
 static void __kill_work(void)
@@ -3514,10 +3511,11 @@ static void __kill_work(void)
   kill_timeout(thr);
 
   forcelog(LOG_DEBUG, "Shutting down mining threads");
+  rd_lock(&mining_thr_lock);
   for (i = 0; i < mining_threads; i++) {
     struct cgpu_info *cgpu;
 
-    thr = get_thread(i);
+    thr = mining_thr[i];
     if (!thr)
       continue;
     cgpu = thr->cgpu;
@@ -3526,6 +3524,7 @@ static void __kill_work(void)
 
     cgpu->shutdown = true;
   }
+  rd_unlock(&mining_thr_lock);
 
   sleep(1);
 
@@ -3722,7 +3721,7 @@ static void *submit_work_thread(void *userdata)
 
   ce = pop_curl_entry(pool);
   /* submit solution to bitcoin via JSON-RPC */
-  while (!submit_upstream_work(work, ce->curl, resubmit)) {
+  while (!submit_upstream_work(work, ce->curl, ce->curl_err_str, resubmit)) {
     if (opt_lowmem) {
       applog(LOG_NOTICE, "%s share being discarded to minimise memory cache", get_pool_name(pool));
       break;
@@ -4183,7 +4182,7 @@ static void *restart_thread(void __maybe_unused *arg)
 {
   struct pool *cp = current_pool();
   struct cgpu_info *cgpu;
-  int i, mt;
+  int i;
 
   pthread_detach(pthread_self());
 
@@ -4195,10 +4194,7 @@ static void *restart_thread(void __maybe_unused *arg)
   discard_stale();
 
   rd_lock(&mining_thr_lock);
-  mt = mining_threads;
-  rd_unlock(&mining_thr_lock);
-
-  for (i = 0; i < mt; i++) {
+  for (i = 0; i < mining_threads; i++) {
     cgpu = mining_thr[i]->cgpu;
     if (unlikely(!cgpu))
       continue;
@@ -4207,6 +4203,7 @@ static void *restart_thread(void __maybe_unused *arg)
     mining_thr[i]->work_restart = true;
     cgpu->drv->flush_work(cgpu);
   }
+  rd_unlock(&mining_thr_lock);
 
   mutex_lock(&restart_lock);
   pthread_cond_broadcast(&restart_cond);
@@ -4292,7 +4289,8 @@ static void set_blockdiff(const struct work *work)
   if (unlikely(current_diff != ddiff)) {
     suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
     current_diff = ddiff;
-    applog(LOG_NOTICE, "Network diff set to %s", block_diff);
+    if (opt_morenotices)
+      applog(LOG_NOTICE, "Network diff set to %s", block_diff);
   }
 }
 
@@ -4349,6 +4347,8 @@ static bool test_work_current(struct work *work)
     }
 
     work->work_block = ++work_block;
+ if (opt_morenotices)
+  {
     if (work->longpoll) {
       if (work->stratum) {
         applog(LOG_NOTICE, "Stratum from %s detected new block", get_pool_name(pool));
@@ -4360,6 +4360,7 @@ static bool test_work_current(struct work *work)
       applog(LOG_NOTICE, "New block detected on network before pool notification");
     else
       applog(LOG_NOTICE, "New block detected on network");
+  }
     restart_threads();
   } else {
     if (memcmp(pool->prev_block, bedata, 32)) {
@@ -4388,10 +4389,11 @@ static bool test_work_current(struct work *work)
     if (work->longpoll) {
       work->work_block = ++work_block;
       if (shared_strategy() || work->pool == current_pool()) {
-        if (work->stratum) {
-          applog(LOG_NOTICE, "Stratum from %s requested work restart", get_pool_name(pool));
-        } else {
-          applog(LOG_NOTICE, "%sLONGPOLL from %s requested work restart", work->gbt ? "GBT " : "", get_pool_name(pool));
+        if(opt_morenotices) {
+          if (work->stratum)
+            applog(LOG_NOTICE, "Stratum from %s requested work restart", get_pool_name(pool));
+          else
+            applog(LOG_NOTICE, "%sLONGPOLL from %s requested work restart", work->gbt ? "GBT " : "", get_pool_name(pool));
         }
         restart_threads();
       }
@@ -5074,8 +5076,9 @@ static void display_options(void)
 
   opt_loginput = true;
   immedok(logwin, true);
-  clear_logwin();
+
 retry:
+  clear_logwin();
   wlogprint("[N]ormal [C]lear [S]ilent mode (disable all output)\n");
   wlogprint("[D]ebug: %s\n[P]er-device: %s\n[Q]uiet: %s\n[V]erbose: %s\n"
       "[R]PC debug: %s\n[W]orkTime details: %s\n[I]ncognito: %s\n"
@@ -5358,20 +5361,22 @@ static void hashmeter(int thr_id, struct timeval *diff,
   bool showlog = false;
   char displayed_hashes[16], displayed_rolling[16];
   uint64_t dh64, dr64;
-  struct thr_info *thr;
+  struct thr_info *thr = NULL;
 
   local_mhashes = (double)hashes_done / 1000000.0;
   /* Update the last time this thread reported in */
-  if (thr_id >= 0) {
-    thr = get_thread(thr_id);
+  rd_lock(&mining_thr_lock);
+  if (thr_id >= 0 && thr_id < mining_threads) {
+    thr = mining_thr[thr_id];
     cgtime(&thr->last);
     thr->cgpu->device_last_well = time(NULL);
   }
+  rd_unlock(&mining_thr_lock);
 
   secs = (double)diff->tv_sec + ((double)diff->tv_usec / 1000000.0);
 
   /* So we can call hashmeter from a non worker thread */
-  if (thr_id >= 0) {
+  if (thr) {
     struct cgpu_info *cgpu = thr->cgpu;
     double thread_rolling = 0.0;
     int i;
@@ -5967,6 +5972,7 @@ static bool pool_active(struct pool *pool, bool pinging)
   bool ret = false;
   json_t *val;
   CURL *curl;
+  char curl_err_str[CURL_ERROR_SIZE];
   int rolltime = 0;
 
   if (pool->has_gbt)
@@ -6004,7 +6010,7 @@ retry_stratum:
   /* Probe for GBT support on first pass */
   if (!pool->probed) {
     applog(LOG_DEBUG, "Probing for GBT support");
-    val = json_rpc_call(curl, pool->rpc_url, pool->rpc_userpass,
+    val = json_rpc_call(curl, curl_err_str, pool->rpc_url, pool->rpc_userpass,
             gbt_req, true, false, &rolltime, pool, false);
     if (val) {
       bool append = false, submit = false;
@@ -6049,7 +6055,7 @@ retry_stratum:
   }
 
   cgtime(&tv_getwork);
-  val = json_rpc_call(curl, pool->rpc_url, pool->rpc_userpass,
+  val = json_rpc_call(curl, curl_err_str, pool->rpc_url, pool->rpc_userpass,
           pool->rpc_req, true, false, &rolltime, pool, false);
   cgtime(&tv_getwork_reply);
 
@@ -6115,7 +6121,7 @@ retry_stratum:
         pool->lp_url = (char *)malloc(siz);
         if (!pool->lp_url) {
           applog(LOG_ERR, "Malloc failure in pool_active");
-          return false;
+          goto out;
         }
 
         snprintf(pool->lp_url, siz, "%s%s%s", pool->rpc_url, need_slash ? "/" : "", copy_start);
@@ -6409,8 +6415,10 @@ static void get_work_prepare_thread(struct thr_info *mythr, struct work *work)
     for (i = 0; i < mining_threads; i++) {
       struct thr_info *thr = mining_thr[i];
       thr->cgpu->algorithm = work->pool->algorithm;
-      if (soft_restart)
+      if (soft_restart) {
         thr->cgpu->drv->thread_prepare(thr);
+        thr->cgpu->drv->thread_init(thr);
+      }
 
       // Necessary because algorithms can have dramatically different diffs
       thr->cgpu->drv->working_diff = 1;
@@ -6498,9 +6506,9 @@ static void submit_work_async(struct work *work)
 
   if (stale_work(work, true)) {
     if (opt_submit_stale)
-      applog(LOG_NOTICE, "%s stale share detected, submitting as user requested", get_pool_name(pool));
+      applog(LOG_NOTICE, "%s stale share detected, submitting (user)", get_pool_name(pool));
     else if (pool->submit_old)
-      applog(LOG_NOTICE, "%s stale share detected, submitting as pool requested", get_pool_name(pool));
+      applog(LOG_NOTICE, "%s stale share detected, submitting (pool)", get_pool_name(pool));
     else {
       applog(LOG_NOTICE, "%s stale share detected, discarding", get_pool_name(pool));
       sharelog("discard", work);
@@ -6945,6 +6953,7 @@ static void *longpoll_thread(void *userdata)
   struct pool *pool = NULL;
   char threadname[16];
   CURL *curl = NULL;
+  char curl_err_str[CURL_ERROR_SIZE];
   int failures = 0;
   char lpreq[1024];
   char *lp_url;
@@ -7016,7 +7025,7 @@ retry_pool:
      * so always establish a fresh connection instead of relying on
      * a persistent one. */
     curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, 1);
-    val = json_rpc_call(curl, lp_url, pool->rpc_userpass,
+    val = json_rpc_call(curl, curl_err_str, lp_url, pool->rpc_userpass,
             lpreq, false, true, &rolltime, pool, false);
 
     cgtime(&reply);
@@ -7265,10 +7274,8 @@ static void *watchdog_thread(void __maybe_unused *userdata)
              schedstart.tm.tm_hour, schedstart.tm.tm_min);
       sched_paused = true;
 
-      rd_lock(&mining_thr_lock);
       for (i = 0; i < mining_threads; i++)
         mining_thr[i]->pause = true;
-      rd_unlock(&mining_thr_lock);
     } else if (sched_paused && should_run()) {
       applog(LOG_WARNING, "Restarting execution as per start time %02d:%02d scheduled",
         schedstart.tm.tm_hour, schedstart.tm.tm_min);
@@ -7280,7 +7287,7 @@ static void *watchdog_thread(void __maybe_unused *userdata)
       for (i = 0; i < mining_threads; i++) {
         struct thr_info *thr;
 
-        thr = get_thread(i);
+        thr = mining_thr[i];
 
         /* Don't touch disabled devices */
         if (thr->cgpu->deven == DEV_DISABLED)
@@ -7891,8 +7898,6 @@ void enable_device(struct cgpu_info *cgpu)
   if (cgpu->drv->drv_id == DRIVER_opencl) {
     mining_threads += cgpu->threads;
   }
-  rwlock_init(&cgpu->qlock);
-  cgpu->queued_work = NULL;
 }
 
 struct _cgpu_devid_counter {
@@ -7903,8 +7908,8 @@ struct _cgpu_devid_counter {
 
 static void adjust_mostdevs(void)
 {
-  if (total_devices > most_devices)
-    most_devices = total_devices;
+  if (total_devices - zombie_devs > most_devices)
+    most_devices = total_devices - zombie_devs;
 }
 
 bool add_cgpu(struct cgpu_info *cgpu)
@@ -7981,6 +7986,7 @@ static void hotplug_process(void)
       quit(1, "Failed to hotplug calloc mining_thr[%d]", i);
   }
 
+  rd_lock(&devices_lock);
   // Start threads
   for (i = 0; i < new_devices; ++i) {
     struct cgpu_info *cgpu = devices[total_devices];
@@ -7990,7 +7996,7 @@ static void hotplug_process(void)
     cgtime(&(cgpu->dev_start_tv));
 
     for (j = 0; j < cgpu->threads; ++j) {
-      thr = __get_thread(mining_threads);
+      thr = mining_thr[mining_threads];
       thr->id = mining_threads;
       thr->cgpu = cgpu;
       thr->device_thread = j;
@@ -8015,6 +8021,7 @@ static void hotplug_process(void)
     total_devices++;
     applog(LOG_WARNING, "Hotplug: %s added %s %i", cgpu->drv->dname, cgpu->drv->name, cgpu->device_id);
   }
+  rd_unlock(&devices_lock);
   wr_unlock(&mining_thr_lock);
 
   adjust_mostdevs();
@@ -8077,18 +8084,24 @@ static void restart_mining_threads(unsigned int new_n_threads)
 
   // Stop and free threads
   if (mining_thr) {
+    rd_lock(&mining_thr_lock);
     for (i = 0; i < mining_threads; i++) {
       mining_thr[i]->cgpu->shutdown = true;
     }
+    rd_unlock(&mining_thr_lock);
+    // kill_mining will rd lock mining_thr_lock
     kill_mining();
+    rd_lock(&mining_thr_lock);
     for (i = 0; i < mining_threads; i++) {
       thr = mining_thr[i];
       thr->cgpu->drv->thread_shutdown(thr);
       thr->cgpu->shutdown = false;
     }
+    rd_unlock(&mining_thr_lock);
   }
 
-  rd_lock(&mining_thr_lock);
+  wr_lock(&mining_thr_lock);
+
   if (mining_thr) {
     for (i = 0; i < total_devices; ++i) {
       free(devices[i]->thr);
@@ -8113,6 +8126,7 @@ static void restart_mining_threads(unsigned int new_n_threads)
       quit(1, "Failed to calloc mining_thr[%d]", i);
   }
 
+  rd_lock(&devices_lock);
   // Start threads
   k = 0;
   for (i = 0; i < total_devices; ++i) {
@@ -8122,27 +8136,27 @@ static void restart_mining_threads(unsigned int new_n_threads)
     cgpu->status = LIFE_INIT;
 
     for (j = 0; j < cgpu->threads; ++j, ++k) {
-      thr = get_thread(k);
+      thr = mining_thr[k];
       thr->id = k;
       thr->cgpu = cgpu;
       thr->device_thread = j;
 
       cgtime(&thr->last);
-
       cgpu->thr[j] = thr;
+
+      if (!cgpu->drv->thread_prepare(thr))
+        continue;
     }
   }
+  rd_unlock(&devices_lock);
+  wr_unlock(&mining_thr_lock);
 
-  rd_unlock(&mining_thr_lock);
-
+  rd_lock(&devices_lock);
   for (i = 0; i < total_devices; ++i) {
     struct cgpu_info *cgpu = devices[i];
 
     for (j = 0; j < cgpu->threads; ++j) {
       thr = cgpu->thr[j];
-
-      if (!cgpu->drv->thread_prepare(thr))
-        continue;
 
       if (unlikely(thr_info_create(thr, NULL, miner_thread, thr)))
         quit(1, "thread %d create failed", thr->id);
@@ -8155,10 +8169,13 @@ static void restart_mining_threads(unsigned int new_n_threads)
       }
     }
   }
+  rd_unlock(&devices_lock);
 }
 
 static void *restart_mining_threads_thread(void *userdata)
 {
+  pthread_detach(pthread_self());
+  
   restart_mining_threads((unsigned int) (intptr_t) userdata);
 
   return NULL;
@@ -8293,10 +8310,8 @@ int main(int argc, char *argv[])
   s = strdup(argv[0]);
   strcpy(sgminer_path, dirname(s));
   free(s);
-  strcat(sgminer_path, "/");
 #else
   GetCurrentDirectory(PATH_MAX - 1, sgminer_path);
-  strcat(sgminer_path, "\\");
 #endif
 
   /* Default algorithm specified in algorithm.c ATM */
@@ -8375,11 +8390,6 @@ int main(int argc, char *argv[])
     free(cnfbuf);
     cnfbuf = NULL;
   }
-#ifdef _MSC_VER
-  strcat(opt_kernel_path, "\\");
-#else
-  strcat(opt_kernel_path, "/");
-#endif
 
   if (want_per_device_stats)
     opt_log_output = true;
@@ -8751,7 +8761,7 @@ retry:
     work->pool = pool;
     ce = pop_curl_entry(pool);
     /* obtain new work from bitcoin via JSON-RPC */
-    if (!get_upstream_work(work, ce->curl)) {
+    if (!get_upstream_work(work, ce->curl, ce->curl_err_str)) {
       applog(LOG_DEBUG, "%s json_rpc_call failed on get work, retrying in 5s", get_pool_name(pool));
       /* Make sure the pool just hasn't stopped serving
        * requests but is up as we'll keep hammering it */
