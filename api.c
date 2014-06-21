@@ -13,8 +13,6 @@
  */
 #define _MEMORY_DEBUG_MASTER 1
 
-#include "config.h"
-
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -26,22 +24,17 @@
 #include <sys/types.h>
 
 #include "compat.h"
-#include "miner.h"
+#include "api.h"
 #include "pool.h"
 #include "util.h"
 #include "pool.h"
 
-#if defined(USE_GRIDSEED)
-#define HAVE_AN_ASIC 1
-#endif
+#include "config_parser.h"
 
 // BUFSIZ varies on Windows and Linux
 #define TMPBUFSIZ 8192
 
-// Number of requests to queue - normally would be small
-#define QUEUE 100
-
-#if defined WIN32
+#ifdef WIN32
 static char WSAbuf[1024];
 
 struct WSAERRORS {
@@ -116,283 +109,8 @@ char *WSAErrorMsg(void) {
 }
 #endif
 
-static const char *UNAVAILABLE = " - API will not be available";
-static const char *MUNAVAILABLE = " - API multicast listener will not be available";
 
-static const char *BLANK = "";
-static const char *COMMA = ",";
-#define COMSTR ","
-static const char SEPARATOR = '|';
-#define SEPSTR "|"
-static const char GPUSEP = ',';
-
-#define CMDJOIN '+'
-#define JOIN_CMD "CMD="
-#define BETWEEN_JOIN SEPSTR
-
-static const char *APIVERSION = "3.2";
-static const char *DEAD = "Dead";
-static const char *SICK = "Sick";
-static const char *NOSTART = "NoStart";
-static const char *INIT = "Initialising";
-static const char *DISABLED = "Disabled";
-static const char *ALIVE = "Alive";
-static const char *REJECTING = "Rejecting";
-static const char *UNKNOWN = "Unknown";
-#define _DYNAMIC "D"
-static const char *DYNAMIC = _DYNAMIC;
-
-static __maybe_unused const char *NONE = "None";
-
-static const char *YES = "Y";
-static const char *NO = "N";
-static const char *NULLSTR = "(null)";
-
-static const char *TRUESTR = "true";
-static const char *FALSESTR = "false";
-
-static const char *DEVICECODE = "GPU "
-#ifdef USE_GRIDSEED
-      "GSD "
-#endif
-  ;
-
-static const char *OSINFO =
-#if defined(__linux__)
-      "Linux";
-#elif defined(__APPLE__)
-      "Apple";
-#elif defined(WIN32)
-      "Windows";
-#elif defined(__CYGWIN__)
-      "Cygwin";
-#elif defined(__unix__)
-      "Unix";
-#else
-      "Unknown";
-#endif
-
-#define _DEVS   "DEVS"
-#define _POOLS    "POOLS"
-#define _SUMMARY  "SUMMARY"
-#define _STATUS   "STATUS"
-#define _VERSION  "VERSION"
-#define _MINECONFIG "CONFIG"
-#define _GPU    "GPU"
-
-#ifdef HAVE_AN_ASIC
-#define _ASC    "ASC"
-#endif
-
-#define _GPUS   "GPUS"
-#define _ASCS    "ASCS"
-#define _NOTIFY   "NOTIFY"
-#define _DEVDETAILS "DEVDETAILS"
-#define _BYE    "BYE"
-#define _RESTART  "RESTART"
-#define _MINESTATS  "STATS"
-#define _CHECK    "CHECK"
-#define _MINECOIN "COIN"
-#define _DEBUGSET "DEBUG"
-#define _SETCONFIG  "SETCONFIG"
-#define _USBSTATS  "USBSTATS"
-
-static const char ISJSON = '{';
-#define JSON0   "{"
-#define JSON1   "\""
-#define JSON2   "\":["
-#define JSON3   "]"
-#define JSON4   ",\"id\":1"
-// If anyone cares, id=0 for truncated output
-#define JSON4_TRUNCATED ",\"id\":0"
-#define JSON5   "}"
-
-#define JSON_START  JSON0
-#define JSON_DEVS JSON1 _DEVS JSON2
-#define JSON_POOLS  JSON1 _POOLS JSON2
-#define JSON_SUMMARY  JSON1 _SUMMARY JSON2
-#define JSON_STATUS JSON1 _STATUS JSON2
-#define JSON_VERSION  JSON1 _VERSION JSON2
-#define JSON_MINECONFIG JSON1 _MINECONFIG JSON2
-#define JSON_GPU  JSON1 _GPU JSON2
-
-#ifdef HAVE_AN_ASIC
-#define JSON_ASC  JSON1 _ASC JSON2
-#endif
-
-#define JSON_GPUS JSON1 _GPUS JSON2
-#define JSON_ASCS JSON1 _ASCS JSON2
-#define JSON_NOTIFY JSON1 _NOTIFY JSON2
-#define JSON_DEVDETAILS JSON1 _DEVDETAILS JSON2
-#define JSON_CLOSE  JSON3
-#define JSON_MINESTATS  JSON1 _MINESTATS JSON2
-#define JSON_CHECK  JSON1 _CHECK JSON2
-#define JSON_MINECOIN JSON1 _MINECOIN JSON2
-#define JSON_DEBUGSET JSON1 _DEBUGSET JSON2
-#define JSON_SETCONFIG JSON1 _SETCONFIG JSON2
-#define JSON_USBSTATS JSON1 _USBSTATS JSON2
-
-#define JSON_END  JSON4 JSON5
-#define JSON_END_TRUNCATED  JSON4_TRUNCATED JSON5
-#define JSON_BETWEEN_JOIN ","
-
-static const char *JSON_COMMAND = "command";
-static const char *JSON_PARAMETER = "parameter";
-
-#define MSG_INVGPU 1
-#define MSG_ALRENA 2
-#define MSG_ALRDIS 3
-#define MSG_GPUMRE 4
-#define MSG_GPUREN 5
-#define MSG_GPUNON 6
-#define MSG_POOL 7
-#define MSG_NOPOOL 8
-#define MSG_DEVS 9
-#define MSG_NODEVS 10
-#define MSG_SUMM 11
-#define MSG_GPUDIS 12
-#define MSG_GPUREI 13
-#define MSG_INVCMD 14
-#define MSG_MISID 15
-#define MSG_GPUDEV 17
-
-#define MSG_NUMGPU 20
-
-#define MSG_VERSION 22
-#define MSG_INVJSON 23
-#define MSG_MISCMD 24
-#define MSG_MISPID 25
-#define MSG_INVPID 26
-#define MSG_SWITCHP 27
-#define MSG_MISVAL 28
-#define MSG_NOADL 29
-#define MSG_NOGPUADL 30
-#define MSG_INVINT 31
-#define MSG_GPUINT 32
-#define MSG_MINECONFIG 33
-#define MSG_GPUMERR 34
-#define MSG_GPUMEM 35
-#define MSG_GPUEERR 36
-#define MSG_GPUENG 37
-#define MSG_GPUVERR 38
-#define MSG_GPUVDDC 39
-#define MSG_GPUFERR 40
-#define MSG_GPUFAN 41
-#define MSG_MISFN 42
-#define MSG_BADFN 43
-#define MSG_SAVED 44
-#define MSG_ACCDENY 45
-#define MSG_ACCOK 46
-#define MSG_ENAPOOL 47
-#define MSG_DISPOOL 48
-#define MSG_ALRENAP 49
-#define MSG_ALRDISP 50
-#define MSG_MISPDP 52
-#define MSG_INVPDP 53
-#define MSG_TOOMANYP 54
-#define MSG_ADDPOOL 55
-
-#define MSG_NOTIFY 60
-
-#define MSG_REMLASTP 66
-#define MSG_ACTPOOL 67
-#define MSG_REMPOOL 68
-#define MSG_DEVDETAILS 69
-#define MSG_MINESTATS 70
-#define MSG_MISCHK 71
-#define MSG_CHECK 72
-#define MSG_POOLPRIO 73
-#define MSG_DUPPID 74
-#define MSG_MISBOOL 75
-#define MSG_INVBOOL 76
-#define MSG_FOO 77
-#define MSG_MINECOIN 78
-#define MSG_DEBUGSET 79
-#define MSG_SETCONFIG 82
-#define MSG_UNKCON 83
-#define MSG_INVNUM 84
-#define MSG_CONPAR 85
-#define MSG_CONVAL 86
-#define MSG_USBSTA 87
-#define MSG_NOUSTA 88
-
-#define MSG_ZERMIS 94
-#define MSG_ZERINV 95
-#define MSG_ZERSUM 96
-#define MSG_ZERNOSUM 97
-#define MSG_PGAUSBNODEV 98
-#define MSG_INVHPLG 99
-#define MSG_HOTPLUG 100
-#define MSG_DISHPLG 101
-#define MSG_NOHPLG 102
-#define MSG_MISHPLG 103
-
-#define MSG_NUMASC 104
-#ifdef HAVE_AN_ASIC
-#define MSG_ASCNON 105
-#define MSG_ASCDEV 106
-#define MSG_INVASC 107
-#define MSG_ASCLRENA 108
-#define MSG_ASCLRDIS 109
-#define MSG_ASCENA 110
-#define MSG_ASCDIS 111
-#define MSG_ASCUNW 112
-#define MSG_ASCIDENT 113
-#define MSG_ASCNOID 114
-#endif
-#define MSG_ASCUSBNODEV 115
-
-#ifdef HAVE_AN_ASIC
-#define MSG_MISASCOPT 116
-#define MSG_ASCNOSET 117
-#define MSG_ASCHELP 118
-#define MSG_ASCSETOK 119
-#define MSG_ASCSETERR 120
-#endif
-
-#define MSG_BYE 0x101
-
-#define MSG_INVNEG 121
-#define MSG_SETQUOTA 122
-#define MSG_LOCKOK 123
-#define MSG_LOCKDIS 124
-
-enum code_severity {
-  SEVERITY_ERR,
-  SEVERITY_WARN,
-  SEVERITY_INFO,
-  SEVERITY_SUCC,
-  SEVERITY_FAIL
-};
-
-enum code_parameters {
-  PARAM_GPU,
-  PARAM_ASC,
-  PARAM_PID,
-  PARAM_GPUMAX,
-  PARAM_ASCMAX,
-  PARAM_PMAX,
-  PARAM_POOLMAX,
-
-// Single generic case: have the code resolve it - see below
-  PARAM_DMAX,
-
-  PARAM_CMD,
-  PARAM_POOL,
-  PARAM_STR,
-  PARAM_BOTH,
-  PARAM_BOOL,
-  PARAM_SET,
-  PARAM_INT,
-  PARAM_NONE
-};
-
-struct CODES {
-  const enum code_severity severity;
-  const int code;
-  const enum code_parameters params;
-  const char *description;
-} codes[] = {
+struct CODES codes[] = {
  { SEVERITY_ERR,   MSG_INVGPU,  PARAM_GPUMAX, "Invalid GPU id %d - range is 0 - %d" },
  { SEVERITY_INFO,  MSG_ALRENA,  PARAM_GPU,  "GPU %d already enabled" },
  { SEVERITY_INFO,  MSG_ALRDIS,  PARAM_GPU,  "GPU %d already disabled" },
@@ -510,10 +228,78 @@ struct CODES {
 #endif
  { SEVERITY_SUCC,  MSG_LOCKOK,  PARAM_NONE, "Lock stats created" },
  { SEVERITY_WARN,  MSG_LOCKDIS, PARAM_NONE, "Lock stats not enabled" },
+ { SEVERITY_SUCC,  MSG_CHSTRAT,  PARAM_STR, "Multipool strategy changed to '%s'" },
+ { SEVERITY_ERR,   MSG_MISSTRAT, PARAM_NONE, "Missing multipool strategy" },
+ { SEVERITY_ERR,   MSG_INVSTRAT, PARAM_NONE, "Invalid multipool strategy %d" },
+ { SEVERITY_ERR,   MSG_MISSTRATINT, PARAM_NONE, "Missing rotate interval" },
+
+ { SEVERITY_SUCC,  MSG_PROFILE,  PARAM_PRMAX, "%d Profile(s)" },
+ { SEVERITY_ERR,   MSG_NOPROFILE,  PARAM_NONE, "No profiles" },
+
+ { SEVERITY_ERR,   MSG_PROFILEEXIST,  PARAM_STR, "Profile '%s' already exists" },
+ { SEVERITY_ERR,   MSG_MISPRD,  PARAM_NONE, "Missing addprofile details" },
+ { SEVERITY_SUCC,  MSG_ADDPROFILE, PARAM_STR,  "Added profile '%s'" },
+
+ { SEVERITY_ERR,   MSG_MISPRID,  PARAM_STR, "Profile name missing" },
+ { SEVERITY_ERR,   MSG_PRNOEXIST,  PARAM_STR, "Profile '%s' doesn't exist" },
+ { SEVERITY_ERR,   MSG_PRISDEFAULT,  PARAM_STR, "Profile '%s' is the default profile" },
+ { SEVERITY_ERR,   MSG_PRINUSE,  PARAM_STR, "Profile '%s' is used by a pool" },
+ { SEVERITY_SUCC,  MSG_REMPROFILE, PARAM_BOTH, "Removed pool %d:'%s'" },
+
+ { SEVERITY_SUCC,  MSG_CHPOOLPR, PARAM_BOTH, "Changed pool %d to profile '%s'" },
+
  { SEVERITY_SUCC,  MSG_BYE,   PARAM_STR,  "%s" },
  { SEVERITY_FAIL, 0, (enum code_parameters)0, NULL }
 };
 
+
+static const char *UNAVAILABLE = " - API will not be available";
+static const char *MUNAVAILABLE = " - API multicast listener will not be available";
+
+static const char *BLANK = "";
+static const char *COMMA = ",";
+static const char SEPARATOR = '|';
+static const char GPUSEP = ',';
+static const char *APIVERSION = "4.0";
+static const char *DEAD = "Dead";
+static const char *SICK = "Sick";
+static const char *NOSTART = "NoStart";
+static const char *INIT = "Initialising";
+static const char *DISABLED = "Disabled";
+static const char *ALIVE = "Alive";
+static const char *REJECTING = "Rejecting";
+static const char *UNKNOWN = "Unknown";
+static const char *DYNAMIC = _DYNAMIC;
+
+static __maybe_unused const char *NONE = "None";
+
+static const char *YES = "Y";
+static const char *NO = "N";
+static const char *NULLSTR = "(null)";
+
+static const char *TRUESTR = "true";
+static const char *FALSESTR = "false";
+
+static const char *DEVICECODE = "GPU ";
+
+static const char *OSINFO =
+#if defined(__linux__)
+      "Linux";
+#elif defined(__APPLE__)
+      "Apple";
+#elif defined(WIN32)
+      "Windows";
+#elif defined(__CYGWIN__)
+      "Cygwin";
+#elif defined(__unix__)
+      "Unix";
+#else
+      "Unknown";
+#endif
+
+static const char *JSON_COMMAND = "command";
+static const char *JSON_PARAMETER = "parameter";
+static const char ISJSON = '{';
 static const char *localaddr = "127.0.0.1";
 
 static int my_thr_id = 0;
@@ -527,49 +313,15 @@ static bool do_a_restart;
 
 static time_t when = 0; // when the request occurred
 
-struct IP4ACCESS {
-  in_addr_t ip;
-  in_addr_t mask;
-  char group;
-};
-
-#define GROUP(g) (toupper(g))
-#define PRIVGROUP GROUP('W')
-#define NOPRIVGROUP GROUP('R')
-#define ISPRIVGROUP(g) (GROUP(g) == PRIVGROUP)
-#define GROUPOFFSET(g) (GROUP(g) - GROUP('A'))
-#define VALIDGROUP(g) (GROUP(g) >= GROUP('A') && GROUP(g) <= GROUP('Z'))
-#define COMMANDS(g) (apigroups[GROUPOFFSET(g)].commands)
-#define DEFINEDGROUP(g) (ISPRIVGROUP(g) || COMMANDS(g) != NULL)
+static struct IP4ACCESS *ipaccess = NULL;
+static int ips = 0;
 
 struct APIGROUPS {
   // This becomes a string like: "|cmd1|cmd2|cmd3|" so it's quick to search
   char *commands;
 } apigroups['Z' - 'A' + 1]; // only A=0 to Z=25 (R: noprivs, W: allprivs)
 
-static struct IP4ACCESS *ipaccess = NULL;
-static int ips = 0;
-
-struct io_data {
-  size_t siz;
-  char *ptr;
-  char *cur;
-  bool sock;
-  bool close;
-};
-
-struct io_list {
-  struct io_data *io_data;
-  struct io_list *prev;
-  struct io_list *next;
-};
-
 static struct io_list *io_head = NULL;
-
-#define SOCKBUFALLOCSIZ 65536
-
-#define io_new(init) _io_new(init, false)
-#define sock_io_new() _io_new(SOCKBUFALLOCSIZ, true)
 
 static void io_reinit(struct io_data *io_data)
 {
@@ -607,7 +359,7 @@ static struct io_data *_io_new(size_t initial, bool socket_buf)
   return io_data;
 }
 
-static bool io_add(struct io_data *io_data, char *buf)
+bool io_add(struct io_data *io_data, char *buf)
 {
   size_t len, dif, tot;
 
@@ -633,12 +385,12 @@ static bool io_add(struct io_data *io_data, char *buf)
   return true;
 }
 
-static void io_close(struct io_data *io_data)
+void io_close(struct io_data *io_data)
 {
   io_data->close = true;
 }
 
-static void io_free()
+void io_free()
 {
   struct io_list *io_list, *io_next;
 
@@ -988,7 +740,7 @@ struct api_data *api_add_avg(struct api_data *root, char *name, float *data, boo
   return api_add_data_full(root, name, API_AVG, (void *)data, copy_data);
 }
 
-static struct api_data *print_data(struct api_data *root, char *buf, bool isjson, bool precom)
+struct api_data *print_data(struct api_data *root, char *buf, bool isjson, bool precom)
 {
   struct api_data *tmp;
   bool first = true;
@@ -1167,7 +919,7 @@ foundit:
 // All replies (except BYE and RESTART) start with a message
 //  thus for JSON, message() inserts JSON_START at the front
 //  and send_result() adds JSON_END at the end
-static void message(struct io_data *io_data, int messageid, int paramid, char *param2, bool isjson)
+void message(struct io_data *io_data, int messageid, int paramid, char *param2, bool isjson)
 {
   struct api_data *root = NULL;
   char buf[TMPBUFSIZ];
@@ -1221,6 +973,9 @@ static void message(struct io_data *io_data, int messageid, int paramid, char *p
 #endif
         case PARAM_PMAX:
           sprintf(buf, codes[i].description, total_pools);
+          break;
+        case PARAM_PRMAX:
+          sprintf(buf, codes[i].description, total_profiles);
           break;
         case PARAM_POOLMAX:
           sprintf(buf, codes[i].description, paramid, total_pools - 1);
@@ -1284,49 +1039,6 @@ static void message(struct io_data *io_data, int messageid, int paramid, char *p
 }
 
 #if LOCK_TRACKING
-
-#define LOCK_FMT_FFL " - called from %s %s():%d"
-
-#define LOCKMSG(fmt, ...) fprintf(stderr, "APILOCK: " fmt "\n", ##__VA_ARGS__)
-#define LOCKMSGMORE(fmt, ...) fprintf(stderr, "          " fmt "\n", ##__VA_ARGS__)
-#define LOCKMSGFFL(fmt, ...) fprintf(stderr, "APILOCK: " fmt LOCK_FMT_FFL "\n", ##__VA_ARGS__, file, func, linenum)
-#define LOCKMSGFLUSH() fflush(stderr)
-
-typedef struct lockstat {
-  uint64_t lock_id;
-  const char *file;
-  const char *func;
-  int linenum;
-  struct timeval tv;
-} LOCKSTAT;
-
-typedef struct lockline {
-  struct lockline *prev;
-  struct lockstat *stat;
-  struct lockline *next;
-} LOCKLINE;
-
-typedef struct lockinfo {
-  void *lock;
-  enum cglock_typ typ;
-  const char *file;
-  const char *func;
-  int linenum;
-  uint64_t gets;
-  uint64_t gots;
-  uint64_t tries;
-  uint64_t dids;
-  uint64_t didnts; // should be tries - dids
-  uint64_t unlocks;
-  LOCKSTAT lastgot;
-  LOCKLINE *lockgets;
-  LOCKLINE *locktries;
-} LOCKINFO;
-
-typedef struct locklist {
-  LOCKINFO *info;
-  struct locklist *next;
-} LOCKLIST;
 
 static uint64_t lock_id = 1;
 
@@ -1669,6 +1381,23 @@ void show_locks()
   lockunlock();
 }
 #endif
+
+static void copyadvanceafter(char ch, char **param, char **buf)
+{
+#define src_p (*param)
+#define dst_b (*buf)
+
+  while (*src_p && *src_p != ch) {
+    if (*src_p == '\\' && *(src_p+1) != '\0')
+      src_p++;
+
+    *(dst_b++) = *(src_p++);
+  }
+  if (*src_p)
+    src_p++;
+
+  *(dst_b++) = '\0';
+}
 
 static void lockstats(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __maybe_unused char *param, bool isjson, __maybe_unused char group)
 {
@@ -2074,6 +1803,7 @@ static void poolstatus(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
     root = api_add_string(root, "Name", get_pool_name(pool), true);
     mutex_unlock(&pool->stratum_lock);
     root = api_add_escape(root, "URL", pool->rpc_url, false);
+    root = api_add_string(root, "Profile", pool->profile, false);
     root = api_add_string(root, "Algorithm", (char *)pool->algorithm.name, false);
     root = api_add_string(root, "Description", pool->description, false);
     root = api_add_string(root, "Status", status, false);
@@ -2351,25 +2081,74 @@ static void switchpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, cha
   message(io_data, MSG_SWITCHP, id, NULL, isjson);
 }
 
-static void copyadvanceafter(char ch, char **param, char **buf)
+static void api_pool_strategy(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, bool isjson, __maybe_unused char group)
 {
-#define src_p (*param)
-#define dst_b (*buf)
-
-  while (*src_p && *src_p != ch) {
-    if (*src_p == '\\' && *(src_p+1) != '\0')
-      src_p++;
-
-    *(dst_b++) = *(src_p++);
+  char *p;
+  int strategy;
+  
+  if (total_pools == 0) 
+  {
+    message(io_data, MSG_NOPOOL, 0, NULL, isjson);
+    return;
   }
-  if (*src_p)
-    src_p++;
 
-  *(dst_b++) = '\0';
+  if (param == NULL || *param == '\0') 
+  {
+    message(io_data, MSG_MISSTRAT, 0, NULL, isjson);
+    return;
+  }
+
+  //get strategy in parameter 1
+  if(!(p = strtok(param, ",")))
+  {
+    message(io_data, MSG_MISSTRAT, 0, NULL, isjson);
+    return;
+  }
+  
+  strategy = atoi(p);
+
+  //invalid strategy
+  if(strategy < 0 || strategy > TOP_STRATEGY)
+  {
+    message(io_data, MSG_INVSTRAT, strategy, NULL, isjson);
+    return;
+  }
+  
+  //if set to rotate, get second param
+  if(strategy == POOL_ROTATE)
+  {
+    //if second param is missing then invalid
+    if(!(p = strtok(NULL, ",")))
+    {
+      message(io_data, MSG_MISSTRATINT, 0, NULL, isjson);
+      return;
+    }
+    
+    //get interval in parameter 2
+    int interval;
+    interval = atoi(p);
+    
+    //interval can only be between 0 and 9999
+    if(interval < 0 || interval > 9999)
+    {
+      message(io_data, MSG_INVNUM, interval, "interval", isjson);
+      return;
+    }
+    
+    //set interval
+    opt_rotate_period = interval;
+  }
+  
+  //set pool strategy
+  pool_strategy = (enum pool_strategy)strategy;
+  //initiate new strategy
+  switch_pools(NULL);
+
+  message(io_data, MSG_CHSTRAT, 0, (char *)strategies[strategy].s, isjson);
 }
 
 static bool pooldetails(char *param, char **url, char **user, char **pass,
-      char **name, char **desc, char **algo)
+      char **name, char **desc, char **profile, char **algo)
 {
   char *ptr, *buf;
 
@@ -2384,23 +2163,28 @@ static bool pooldetails(char *param, char **url, char **user, char **pass,
 
   *user = buf;
   copyadvanceafter(',', &param, &buf);
-  if (!*param) // missing pass
+  if (!(*param)) // missing pass
     goto exitsama;
 
   *pass = buf;
   copyadvanceafter(',', &param, &buf);
-  if (!*param) // missing name (allowed)
+  if (!(*param)) // missing name (allowed)
     return true;
 
   *name = buf;
   copyadvanceafter(',', &param, &buf);
-  if (!*param) // missing desc
-    goto exitsama;
+  if (!(*param)) // missing desc
+    return true;
 
   *desc = buf;
   copyadvanceafter(',', &param, &buf);
-  if (!*param) // missing algo
-    goto exitsama;
+  if (!(*param)) // missing profile
+    return true;
+
+  *profile = buf;
+  copyadvanceafter(',', &param, &buf);
+  if (!(*param)) // missing algo
+    return true;
 
   *algo = buf;
   copyadvanceafter(',', &param, &buf);
@@ -2415,7 +2199,7 @@ exitsama:
 static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, bool isjson, __maybe_unused char group)
 {
   char *url, *user, *pass;
-  char *name = NULL, *desc = NULL, *algo = NULL;
+  char *name = NULL, *desc = NULL, *algo = NULL, *profile = NULL;
   struct pool *pool;
   char *ptr;
 
@@ -2425,7 +2209,7 @@ static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *
   }
 
   if (!pooldetails(param, &url, &user, &pass,
-       &name, &desc, &algo)) {
+       &name, &desc, &profile, &algo)) {
     ptr = escape_string(param, isjson);
     message(io_data, MSG_INVPDP, 0, ptr, isjson);
     if (ptr != param)
@@ -2437,11 +2221,12 @@ static void addpool(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *
   /* If API client is old, it might not have provided all fields. */
   if (name == NULL) name = strdup("");
   if (desc == NULL) desc = strdup("");
+  if (profile == NULL) profile = strdup("");
   if (algo == NULL) algo = strdup("scrypt");  // FIXME?
 
   pool = add_pool();
   detect_stratum(pool, url);
-  add_pool_details(pool, true, url, user, pass, name, desc, algo);
+  add_pool_details(pool, true, url, user, pass, name, desc, profile, algo);
 
   ptr = escape_string(url, isjson);
   message(io_data, MSG_ADDPOOL, 0, ptr, isjson);
@@ -2979,7 +2764,7 @@ static void devdetails(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
 void dosave(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, bool isjson, __maybe_unused char group)
 {
   char filename[PATH_MAX];
-  FILE *fcfg;
+//  FILE *fcfg;
   char *ptr;
 
   if (param == NULL || *param == '\0') {
@@ -2987,7 +2772,7 @@ void dosave(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, b
     param = filename;
   }
 
-  fcfg = fopen(param, "w");
+  /*fcfg = fopen(param, "w");
   if (!fcfg) {
     ptr = escape_string(param, isjson);
     message(io_data, MSG_BADFN, 0, ptr, isjson);
@@ -2995,10 +2780,10 @@ void dosave(struct io_data *io_data, __maybe_unused SOCKETTYPE c, char *param, b
       free(ptr);
     ptr = NULL;
     return;
-  }
+  }*/
 
-  write_config(fcfg);
-  fclose(fcfg);
+  write_config(param);
+  //fclose(fcfg);
 
   ptr = escape_string(param, isjson);
   message(io_data, MSG_SAVED, 0, ptr, isjson);
@@ -3710,6 +3495,7 @@ struct CMDS {
   { "config",   minerconfig,  false,  true },
   { "devs",   devstatus,  false,  true },
   { "pools",    poolstatus, false,  true },
+  { "profiles",    api_profile_list, false,  true },
   { "summary",    summary,  false,  true },
   { "gpuenable",          gpuenable,      true, false },
   { "gpudisable",         gpudisable,     true, false },
@@ -3717,12 +3503,16 @@ struct CMDS {
   { "gpu",                gpudev,         false,  false },
   { "gpucount",           gpucount,       false,  true },
   { "switchpool",   switchpool, true, false },
+  { "changestrategy",   api_pool_strategy, true, false },
   { "addpool",    addpool,  true, false },
   { "poolpriority", poolpriority, true, false },
   { "poolquota",    poolquota,  true, false },
   { "enablepool",   enablepool, true, false },
   { "disablepool",  disablepool,  true, false },
   { "removepool",   removepool, true, false },
+  { "changepoolprofile",   api_pool_profile, true, false },
+  { "addprofile",    api_profile_add,  true, false },
+  { "removeprofile",    api_profile_remove,  true, false },
   { "gpuintensity",       gpuintensity,   true, false },
   { "gpumem",             gpumem,         true, false },
   { "gpuengine",          gpuengine,      true, false },

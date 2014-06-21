@@ -1,6 +1,5 @@
-#ifndef __WINBUILD_H__
-#define __WINBUILD_H__
-#endif
+#ifndef WINBUILD_H
+#define WINBUILD_H
 
 #if defined(_MSC_VER)
 
@@ -139,5 +138,5 @@ inline void* memmem (void* buf, size_t buflen, void* pat, size_t patlen)
 #define __func__ __FUNCTION__
 #define __attribute__(x)
 
-
-#endif
+#endif /* _MSC_VER */
+#endif /* WINBUILD_H */

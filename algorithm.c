@@ -26,6 +26,7 @@
 #include "algorithm/twecoin.h"
 #include "algorithm/marucoin.h"
 #include "algorithm/maxcoin.h"
+#include "algorithm/talkcoin.h"
 
 #include "compat.h"
 
@@ -274,6 +275,44 @@ static cl_int queue_marucoin_mod_old_kernel(struct __clState *clState, struct _d
   return status;
 }
 
+static cl_int queue_talkcoin_mod_kernel(struct __clState *clState, struct _dev_blk_ctx *blk, __maybe_unused cl_uint threads)
+{
+  cl_kernel *kernel;
+  unsigned int num;
+  cl_ulong le_target;
+  cl_int status = 0;
+
+  le_target = *(cl_ulong *)(blk->work->device_target + 24);
+  flip80(clState->cldata, blk->work->data);
+  status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL,NULL);
+
+  // blake - search
+  kernel = &clState->kernel;
+  num = 0;
+  CL_SET_ARG(clState->CLbuffer0);
+  CL_SET_ARG(clState->padbuffer8);
+  // groestl - search1
+  kernel = clState->extra_kernels;
+  num = 0;
+  CL_SET_ARG(clState->padbuffer8);
+  // jh - search2
+  kernel++;
+  num = 0;
+  CL_SET_ARG(clState->padbuffer8);
+  // keccak - search3
+  kernel++;
+  num = 0;
+  CL_SET_ARG(clState->padbuffer8);
+  // skein - search4
+  kernel++;
+  num = 0;
+  CL_NEXTKERNEL_SET_ARG(clState->padbuffer8);
+  CL_SET_ARG(clState->outputBuffer);
+  CL_SET_ARG(le_target);
+
+  return status;
+}
+
 typedef struct _algorithm_settings_t {
   const char *name; /* Human-readable identifier */
   char*    kernelname; /* Default kernel */
@@ -334,6 +373,7 @@ static algorithm_settings_t algos[] = {
   A_DARK_MOD( "darkcoin-mod", 10, darkcoin_regenhash, queue_darkcoin_mod_kernel, NULL),
   A_DARK_MOD( "marucoin-mod", 12, marucoin_regenhash, queue_marucoin_mod_kernel, append_hamsi_compiler_options),
   A_DARK_MOD( "marucoin-modold", 10, marucoin_regenhash, queue_marucoin_mod_old_kernel, append_hamsi_compiler_options),
+  A_DARK_MOD( "talkcoin-mod", 4, talkcoin_regenhash, queue_talkcoin_mod_kernel, NULL),
 #undef A_DARK_MOD
 
   // kernels starting from this will have difficulty calculated by using fuguecoin algorithm
